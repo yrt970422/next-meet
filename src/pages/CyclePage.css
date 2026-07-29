@@ -1,0 +1,436 @@
+.cycle-page {
+  display: grid;
+  gap: 18px;
+  color: #493934;
+  text-align: left;
+}
+
+.cycle-page__header,
+.cycle-progress,
+.cycle-calendar {
+  padding: 20px;
+  border: 1px solid #eadbd2;
+  border-radius: 22px;
+  background: #fffcf8;
+}
+
+.cycle-page__header label {
+  display: grid;
+  gap: 5px;
+  color: #8d7770;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cycle-page__header select {
+  width: 100%;
+  max-width: 240px;
+  padding: 9px 11px;
+  border: 1px solid #dfcfc5;
+  border-radius: 12px;
+  color: #493934;
+  background: #fffaf3;
+  font: inherit;
+}
+
+.cycle-page__header h2 {
+  margin: 18px 0 6px;
+  color: #493934;
+  font-size: 27px;
+  font-weight: 800;
+}
+
+.cycle-page__header p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: #806f69;
+  font-size: 14px;
+}
+
+.cycle-page__header p strong {
+  color: #b94b57;
+}
+
+.cycle-progress h3,
+.cycle-calendar h3 {
+  margin: 0;
+  color: #493934;
+  font-size: 18px;
+}
+
+.cycle-progress ul {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cycle-progress li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: #66534d;
+  font-size: 13px;
+}
+
+.cycle-progress li strong {
+  color: #8d7770;
+  font-variant-numeric: tabular-nums;
+}
+
+.cycle-progress__track {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f1e6df;
+}
+
+.cycle-progress__track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #c96f76;
+}
+
+.cycle-calendar__toolbar {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.cycle-calendar__toolbar button,
+.cycle-detail__heading button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #72534e;
+  background: #f8eee8;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.cycle-calendar__weekdays,
+.cycle-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.cycle-calendar__weekdays {
+  margin-bottom: 6px;
+  color: #a08e88;
+  font-size: 11px;
+  text-align: center;
+}
+
+.cycle-calendar__day {
+  position: relative;
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #5f4e49;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cycle-calendar__day::before,
+.cycle-calendar__day::after {
+  position: absolute;
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+
+.cycle-calendar__day--workout::before {
+  inset: 2px;
+  border: 2px solid #c86d62;
+}
+
+.cycle-calendar__day--sleep::after {
+  inset: 9px;
+  border: 1.5px solid #68629c;
+}
+
+.cycle-calendar__day--selected {
+  background: #f5e5df;
+}
+
+.cycle-calendar__day:disabled {
+  color: #d2c5bf;
+  cursor: default;
+}
+
+.cycle-calendar__legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 14px;
+  color: #8d7770;
+  font-size: 11px;
+}
+
+.cycle-calendar__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cycle-calendar__legend i {
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.cycle-calendar__legend-workout {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #c86d62;
+}
+
+.cycle-calendar__legend-sleep {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #68629c;
+}
+
+.cycle-detail-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(71 54 48 / 28%);
+}
+
+.cycle-detail {
+  width: min(100%, 560px);
+  max-height: min(78vh, 680px);
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid #eadbd2;
+  border-radius: 26px 26px 18px 18px;
+  background: #fffaf3;
+  box-shadow: 0 20px 60px rgb(73 57 52 / 18%);
+}
+
+.cycle-detail__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cycle-detail__heading h3 {
+  margin: 0;
+  color: #493934;
+  font-size: 21px;
+}
+
+.cycle-detail__records {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cycle-detail__records li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid #eadbd2;
+  border-radius: 15px;
+  background: #fffdf9;
+}
+
+.cycle-detail__record-icon {
+  width: 13px;
+  height: 13px;
+  margin-top: 4px;
+  border: 2px solid #c86d62;
+  border-radius: 50%;
+}
+
+.cycle-detail__record-icon--sleep {
+  width: 9px;
+  height: 9px;
+  border-color: #68629c;
+}
+
+.cycle-detail__records strong,
+.cycle-detail__records time {
+  display: block;
+}
+
+.cycle-detail__records time {
+  margin-top: 3px;
+  color: #8d7770;
+  font-size: 12px;
+}
+
+.cycle-detail__records p {
+  margin-top: 7px;
+  color: #75645e;
+  font-size: 12px;
+}
+
+.cycle-detail__records button {
+  padding: 4px 7px;
+  border: 0;
+  color: #9e5c5c;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cycle-detail__empty {
+  margin: 24px 0;
+  color: #8d7770;
+  font-size: 14px;
+}
+
+.cycle-detail__add-actions button,
+.cycle-makeup__actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid #d9b9ad;
+  border-radius: 999px;
+  color: #8f4d4f;
+  background: #f9e8e5;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cycle-detail__add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cycle-makeup {
+  display: grid;
+  gap: 13px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #eadbd2;
+}
+
+.cycle-makeup h4 {
+  margin: 0;
+  color: #493934;
+  font-size: 16px;
+}
+
+.cycle-makeup label {
+  display: grid;
+  gap: 5px;
+  color: #75645e;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cycle-makeup select,
+.cycle-makeup input {
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #dfcfc5;
+  border-radius: 11px;
+  color: #493934;
+  background: #fffdf9;
+  font: inherit;
+}
+
+.cycle-makeup__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cycle-makeup__actions button:last-child {
+  color: #fff;
+  background: #b94b57;
+}
+
+.cycle-page--empty {
+  padding: 36px 20px;
+  border: 1px dashed #dccac0;
+  border-radius: 20px;
+  background: #fffcf8;
+  text-align: center;
+}
+
+.cycle-snackbar {
+  position: fixed;
+  z-index: 30;
+  right: 50%;
+  bottom: max(82px, calc(env(safe-area-inset-bottom) + 70px));
+  width: max-content;
+  max-width: calc(100% - 40px);
+  padding: 10px 16px;
+  border: 1px solid #e1cfc4;
+  border-radius: 999px;
+  color: #66534d;
+  background: rgb(255 248 240 / 96%);
+  box-shadow: 0 8px 24px rgb(73 57 52 / 13%);
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+  transform: translateX(50%);
+  animation: cycle-snackbar-in 180ms ease-out;
+}
+
+@keyframes cycle-snackbar-in {
+  from {
+    opacity: 0;
+    transform: translate(50%, 6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(50%, 0);
+  }
+}
+
+@media (max-width: 520px) {
+  .cycle-page__header,
+  .cycle-progress,
+  .cycle-calendar {
+    padding: 16px;
+  }
+
+  .cycle-detail-backdrop {
+    padding: 0;
+  }
+
+  .cycle-detail {
+    border-radius: 26px 26px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cycle-detail-backdrop {
+    scroll-behavior: auto;
+  }
+
+  .cycle-snackbar {
+    animation: none;
+  }
+}

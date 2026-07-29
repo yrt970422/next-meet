@@ -1,74 +1,137 @@
-import type { AppState } from '../types/models'
+import type { AppState, ExerciseType } from '../types/models'
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function getDefaultExerciseTypes(): ExerciseType[] {
+  const createdAt = new Date().toISOString()
+
+  return [
+    {
+      id: 'strength-default',
+      name: '力量训练',
+      category: 'strength',
+      icon: '💪',
+      createdAt,
+      enabled: true,
+    },
+    {
+      id: 'dance',
+      name: '健身操',
+      category: 'cardio',
+      icon: '🎵',
+      createdAt,
+      enabled: true,
+    },
+    {
+      id: 'boxing',
+      name: '拳击',
+      category: 'cardio',
+      icon: '🥊',
+      createdAt,
+      enabled: true,
+    },
+    {
+      id: 'running',
+      name: '跑步',
+      category: 'cardio',
+      icon: '🏃',
+      createdAt,
+      enabled: true,
+    },
+    {
+      id: 'cardio-default',
+      name: '有氧训练',
+      category: 'cardio',
+      createdAt,
+      enabled: false,
+    },
+  ]
+}
 
 export function getDefaultAppState(): AppState {
   const cycleId = 'cycle-1'
+  const startDate = new Date()
+  startDate.setDate(startDate.getDate() - 1)
+  const targetDate = new Date(startDate)
+  targetDate.setDate(targetDate.getDate() + 21)
+  const goals = [
+    {
+      id: 'goal-strength-default',
+      cycleId,
+      type: 'strength' as const,
+      exerciseTypeId: 'strength-default',
+      targetCount: 6,
+      title: '力量训练',
+      unit: '次',
+    },
+    {
+      id: 'goal-dance',
+      cycleId,
+      type: 'cardio' as const,
+      exerciseTypeId: 'dance',
+      targetCount: 3,
+      title: '健身操',
+      unit: '次',
+    },
+    {
+      id: 'goal-boxing',
+      cycleId,
+      type: 'cardio' as const,
+      exerciseTypeId: 'boxing',
+      targetCount: 3,
+      title: '拳击',
+      unit: '次',
+    },
+    {
+      id: 'goal-running',
+      cycleId,
+      type: 'cardio' as const,
+      exerciseTypeId: 'running',
+      targetCount: 3,
+      title: '跑步',
+      unit: '次',
+    },
+    {
+      id: 'goal-sleep',
+      cycleId,
+      type: 'sleep' as const,
+      targetCount: 19,
+      title: '早睡',
+      unit: '晚',
+    },
+    {
+      id: 'goal-todo',
+      cycleId,
+      type: 'todo' as const,
+      targetCount: 5,
+      title: '见面前的小事',
+      unit: '件',
+    },
+  ]
 
   return {
+    schemaVersion: 4,
     cycles: [
       {
         id: cycleId,
         title: '下一场见',
-        startDate: new Date().toISOString().slice(0, 10),
-        targetDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        startDate: formatLocalDate(startDate),
+        targetDate: formatLocalDate(targetDate),
         lengthDays: 21,
         status: 'active',
         createdAt: new Date().toISOString(),
-        goals: [
-          {
-            id: 'goal-strength',
-            cycleId,
-            type: 'strength',
-            targetCount: 6,
-            title: '力量训练',
-            unit: '次',
-          },
-          {
-            id: 'goal-cardio',
-            cycleId,
-            type: 'cardio',
-            targetCount: 9,
-            title: '有氧训练',
-            unit: '次',
-          },
-          {
-            id: 'goal-sleep',
-            cycleId,
-            type: 'sleep',
-            targetCount: 19,
-            title: '早睡',
-            unit: '晚',
-          },
-        ],
+        goals: goals.map((goal) => ({ ...goal })),
       },
     ],
     activeCycleId: cycleId,
-    goals: [
-      {
-        id: 'goal-strength',
-        cycleId,
-        type: 'strength',
-        targetCount: 6,
-        title: '力量训练',
-        unit: '次',
-      },
-      {
-        id: 'goal-cardio',
-        cycleId,
-        type: 'cardio',
-        targetCount: 9,
-        title: '有氧训练',
-        unit: '次',
-      },
-      {
-        id: 'goal-sleep',
-        cycleId,
-        type: 'sleep',
-        targetCount: 19,
-        title: '早睡',
-        unit: '晚',
-      },
-    ],
+    goals: goals.map((goal) => ({ ...goal })),
     activities: [],
+    exerciseTypes: getDefaultExerciseTypes(),
     achievements: [
       {
         id: 'achievement-strength',

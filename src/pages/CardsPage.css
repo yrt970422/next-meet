@@ -1,0 +1,30 @@
+.cards-page-placeholder {
+  padding: 42px 24px;
+  border: 1px dashed #dccac0;
+  border-radius: 22px;
+  color: #493934;
+  background: #fffcf8;
+  text-align: center;
+}
+
+.cards-page-placeholder p {
+  margin: 0 0 6px;
+  color: #b94b57;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.cards-page-placeholder h2 {
+  margin: 0 0 10px;
+  color: #493934;
+  font-size: 22px;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
+.cards-page-placeholder span {
+  color: #806f69;
+  font-size: 14px;
+  line-height: 1.65;
+}

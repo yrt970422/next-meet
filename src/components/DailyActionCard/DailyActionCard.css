@@ -1,0 +1,279 @@
+.daily-action-card {
+  --daily-accent: #a8542a;
+  --daily-soft: #f8e7dc;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  box-sizing: border-box;
+  aspect-ratio: 3 / 4;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--daily-accent) 22%, #dfcfc5);
+  border-radius: 24px;
+  color: #493934;
+  background:
+    radial-gradient(circle at 18% 12%, rgb(255 255 255 / 68%) 0 7%, transparent 24%),
+    repeating-linear-gradient(
+      12deg,
+      rgb(112 79 64 / 1.4%) 0 1px,
+      transparent 1px 5px
+    ),
+    color-mix(in srgb, var(--daily-soft) 35%, #fffaf3);
+  box-shadow: 0 3px 0 rgb(112 79 64 / 5%);
+  touch-action: none;
+  user-select: none;
+  will-change: transform, opacity;
+}
+
+.daily-action-card--sleep {
+  --daily-accent: #565391;
+  --daily-soft: #e9e8f7;
+}
+
+.daily-action-card--available {
+  cursor: grab;
+}
+
+.daily-action-card--available::after {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 25px;
+  height: 25px;
+  border-top: 1px solid color-mix(in srgb, var(--daily-accent) 24%, #dfcfc5);
+  border-left: 1px solid color-mix(in srgb, var(--daily-accent) 24%, #dfcfc5);
+  border-top-left-radius: 7px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--daily-accent) 12%, #fff) 0 48%,
+    color-mix(in srgb, var(--daily-soft) 58%, #fffaf3) 50%
+  );
+  box-shadow: -3px -3px 7px rgb(93 64 51 / 5%);
+  content: '';
+  pointer-events: none;
+  transform-origin: right bottom;
+  transition:
+    width 180ms ease,
+    height 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.daily-action-card--dragging::after {
+  width: 34px;
+  height: 34px;
+  box-shadow: -5px -5px 10px rgb(93 64 51 / 8%);
+}
+
+.daily-action-card--available:active,
+.daily-action-card--dragging {
+  cursor: grabbing;
+}
+
+.daily-action-card--available:not(.daily-action-card--dragging, .daily-action-card--committing) {
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease,
+    border-color 160ms ease;
+}
+
+.daily-action-card--committing {
+  pointer-events: none;
+  transition:
+    transform 340ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 340ms ease;
+}
+
+.daily-action-card--folded {
+  border-color: color-mix(in srgb, var(--daily-accent) 30%, #d9c7bd);
+  background:
+    repeating-linear-gradient(
+      12deg,
+      rgb(112 79 64 / 1.2%) 0 1px,
+      transparent 1px 5px
+    ),
+    color-mix(in srgb, var(--daily-soft) 52%, #fffaf3);
+  box-shadow: 0 3px 0 rgb(112 79 64 / 5%);
+  animation: daily-card-settle 420ms cubic-bezier(0.2, 0.78, 0.24, 1);
+}
+
+.daily-action-card--folded::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 34px;
+  height: 34px;
+  border-bottom: 1px solid color-mix(in srgb, var(--daily-accent) 25%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--daily-accent) 25%, transparent);
+  border-bottom-left-radius: 9px;
+  background: linear-gradient(
+    225deg,
+    color-mix(in srgb, var(--daily-accent) 14%, #fff) 0 49%,
+    transparent 50%
+  );
+  content: '';
+}
+
+.daily-action-card:focus-visible {
+  outline: 3px solid #5d52ba;
+  outline-offset: 3px;
+}
+
+.daily-action-card[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.68 !important;
+}
+
+.daily-action-card__face {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 2px 10px;
+  text-align: center;
+}
+
+.daily-action-card__cycle {
+  position: absolute;
+  z-index: 2;
+  top: -7px;
+  right: -5px;
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--daily-accent) 18%, #dfcfc5);
+  border-radius: 50%;
+  color: var(--daily-accent);
+  background: transparent;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.daily-action-card__cycle:hover {
+  background: rgb(255 255 255 / 48%);
+}
+
+.daily-action-card__cycle:focus-visible {
+  outline: 2px solid #5d52ba;
+  outline-offset: 2px;
+}
+
+.daily-action-card__visual {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  place-items: center;
+  overflow: visible;
+}
+
+.daily-action-card__logo {
+  display: block;
+  width: min(116%, 10.75rem);
+  max-width: none;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.daily-action-card--sleep .daily-action-card__logo {
+  width: min(122%, 11.25rem);
+}
+
+.daily-action-card__details {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: center;
+  padding: 2px 4px 3px;
+}
+
+.daily-action-card__details h3 {
+  margin: 0 0 7px;
+  color: #493934;
+  font-size: clamp(16px, 4.5vw, 22px);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.daily-action-card__target {
+  margin: 0;
+  color: var(--daily-accent);
+  font-size: clamp(12px, 3.2vw, 15px);
+  font-weight: 720;
+  line-height: 1.4;
+}
+
+.daily-action-card__face--folded {
+  position: relative;
+  z-index: 1;
+  padding: 8px 0 6px;
+}
+
+.daily-action-card__feedback-pig {
+  width: min(112%, 11.25rem);
+  max-width: none;
+}
+
+.daily-action-card__face--folded .daily-action-card__details {
+  padding-bottom: 0;
+  transform: translateY(3px);
+}
+
+.daily-action-card__face--folded .daily-action-card__details h3 {
+  margin-bottom: 4px;
+  font-size: clamp(13px, 3.6vw, 17px);
+}
+
+.daily-action-card__face--folded time {
+  color: #75645e;
+  font-size: clamp(10px, 2.8vw, 13px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes daily-card-settle {
+  0% {
+    opacity: 0.24;
+    transform: translate(18px, 18px) rotate(7deg) scale(0.84);
+  }
+
+  58% {
+    opacity: 0.94;
+    transform: translate(-2px, 1px) rotate(-2.2deg) scale(0.975);
+  }
+
+  78% {
+    opacity: 1;
+    transform: translate(3px, -1px) rotate(-0.4deg) scale(1.006);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(2px, -1px) rotate(-0.8deg) scale(0.992);
+  }
+}
+
+@media (min-width: 720px) {
+  .daily-action-card {
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-action-card,
+  .daily-action-card--available,
+  .daily-action-card--available::after,
+  .daily-action-card--committing,
+  .daily-action-card--folded {
+    animation: none;
+    transition: none;
+  }
+}

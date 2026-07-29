@@ -1,4 +1,4 @@
-import { useAppState } from '../app/providers/AppProvider'
+import { useAppState } from '../app/providers/useAppState'
 
 export default function HistoryPage() {
   const { state } = useAppState()

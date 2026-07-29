@@ -1,0 +1,31 @@
+.pig {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  aspect-ratio: 1;
+  max-inline-size: 100%;
+}
+
+.pig--small {
+  inline-size: 4.5rem;
+}
+
+.pig--medium {
+  inline-size: 7.5rem;
+}
+
+.pig--large {
+  inline-size: 12rem;
+}
+
+.pig--hero {
+  inline-size: clamp(13rem, 56vw, 18rem);
+}
+
+.pig__image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  user-select: none;
+}

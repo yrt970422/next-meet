@@ -1,9 +1,11 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import {
+  createBrowserRouter,
+  Navigate,
+  RouterProvider,
+} from 'react-router-dom'
 import { AppShell } from './AppShell'
 import HomePage from '../pages/HomePage'
-import CardsPage from '../pages/CardsPage'
-import AchievementsPage from '../pages/AchievementsPage'
-import HistoryPage from '../pages/HistoryPage'
+import CyclePage from '../pages/CyclePage'
 import SettingsPage from '../pages/SettingsPage'
 
 const router = createBrowserRouter([
@@ -16,20 +18,32 @@ const router = createBrowserRouter([
         element: <HomePage />,
       },
       {
-        path: 'cards',
-        element: <CardsPage />,
+        path: 'cycle',
+        element: <CyclePage />,
       },
       {
-        path: 'achievements',
-        element: <AchievementsPage />,
+        path: 'cards',
+        element: <Navigate to="/cycle" replace />,
       },
       {
         path: 'history',
-        element: <HistoryPage />,
+        element: <Navigate to="/cycle" replace />,
+      },
+      {
+        path: 'calendar',
+        element: <Navigate to="/cycle" replace />,
+      },
+      {
+        path: 'achievements',
+        element: <Navigate to="/" replace />,
       },
       {
         path: 'settings',
         element: <SettingsPage />,
+      },
+      {
+        path: '*',
+        element: <Navigate to="/" replace />,
       },
     ],
   },

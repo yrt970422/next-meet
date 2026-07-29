@@ -1,4 +1,9 @@
+import type { PigLevel } from './pig'
+
 export type GoalType = 'strength' | 'cardio' | 'sleep' | 'todo'
+export type ActivityType = 'workout' | 'sleep'
+export type ActivitySource = 'daily' | 'makeup' | 'migration'
+export type ExerciseCategory = 'strength' | 'cardio' | 'flexibility' | 'other'
 
 export type CycleStatus = 'active' | 'completed' | 'archived'
 
@@ -6,23 +11,48 @@ export interface Goal {
   id: string
   cycleId: string
   type: GoalType
+  exerciseTypeId?: string
   targetCount: number
   title?: string
   unit?: string
+}
+
+export interface ExerciseType {
+  id: string
+  name: string
+  category: ExerciseCategory
+  icon?: string
+  createdAt: string
+  enabled: boolean
 }
 
 export interface ActivityRecord {
   id: string
   cycleId: string
   goalId: string
-  completedAt: string
-  note?: string
+  type: ActivityType
+  date: string
+  recordedAt: string
+  source: ActivitySource
   metadata?: {
-    action?: string
+    exerciseTypeId?: string
     weight?: number
     reps?: number
     durationMinutes?: number
+    sleepTime?: string
+    note?: string
   }
+}
+
+export interface RecordDailyActivityInput {
+  goalId: string
+  note?: string
+  metadata?: ActivityRecord['metadata']
+}
+
+export interface RecordActivityForDateInput extends RecordDailyActivityInput {
+  date: string
+  time: string
 }
 
 export interface Cycle {
@@ -50,7 +80,7 @@ export interface Achievement {
 export interface Pig {
   id: string
   name: string
-  level: 1 | 2 | 3 | 4 | 5
+  level: PigLevel
   completedCardCount: number
   lastUpdatedAt: string
 }
@@ -62,10 +92,12 @@ export interface UserSettings {
 }
 
 export interface AppState {
+  schemaVersion: 4
   cycles: Cycle[]
   activeCycleId: string | null
   goals: Goal[]
   activities: ActivityRecord[]
+  exerciseTypes: ExerciseType[]
   achievements: Achievement[]
   pig: Pig
   settings: UserSettings
