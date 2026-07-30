@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getDefaultAppState } from '../../constants/defaults'
 import { resolveCurrentCycle } from '../../services/currentCycle'
+import { synchronizePigGrowth } from '../../services/pigGrowth'
 import { loadAppState, saveAppState } from '../../services/storage'
 import type {
   ActivityRecord,
@@ -60,13 +61,14 @@ function getInitialAppState() {
 
 export function AppProvider({ children }: AppProviderProps) {
   const [state, setState] = useState<AppState>(getInitialAppState)
+  const resolvedState = useMemo(() => synchronizePigGrowth(state), [state])
 
   useEffect(() => {
-    saveAppState(state)
-  }, [state])
+    saveAppState(resolvedState)
+  }, [resolvedState])
 
   const value = useMemo<AppContextValue>(() => ({
-    state,
+    state: resolvedState,
     replaceAppState: (nextState) => {
       setState(nextState)
     },
@@ -557,7 +559,7 @@ export function AppProvider({ children }: AppProviderProps) {
         },
       }))
     },
-  }), [state])
+  }), [resolvedState])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

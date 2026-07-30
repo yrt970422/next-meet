@@ -19,6 +19,7 @@ import {
   type ParsedBackup,
 } from '../services/backup'
 import { resolveCurrentCycle } from '../services/currentCycle'
+import { resolvePigGrowth } from '../services/pigGrowth'
 import type {
   Action,
   ActionCategory,
@@ -62,6 +63,8 @@ const CATEGORY_LABELS: Record<ActionCategory, string> = {
   work: '工作',
   custom: '自定义',
 }
+
+const GROWTH_STAR_LOGO = resolveActionCategoryLogo('custom', 'small')
 
 const CATEGORY_DESCRIPTIONS: Record<ActionCategory, string> = {
   health: '主动提升身体能力',
@@ -251,6 +254,7 @@ export default function SettingsPage() {
   const [actionError, setActionError] = useState('')
   const [pendingImport, setPendingImport] = useState<ParsedBackup | null>(null)
   const [dataMessage, setDataMessage] = useState('')
+  const [isPigGrowthExpanded, setIsPigGrowthExpanded] = useState(false)
   const [isInstallExpanded, setIsInstallExpanded] = useState(false)
   const [installDevice, setInstallDevice] = useState<'ios' | 'android'>(
     () =>
@@ -556,6 +560,7 @@ export default function SettingsPage() {
           '选择「添加到主屏幕」',
           '点击添加',
         ]
+  const pigGrowth = resolvePigGrowth(state.activities.length)
 
   return (
     <section className="settings-page" aria-label="设置">
@@ -575,10 +580,69 @@ export default function SettingsPage() {
           <span><small>名字</small><strong>{state.pig.name}</strong></span>
           <span aria-hidden="true">›</span>
         </button>
-        <div className="settings-row settings-row--static">
+        <button
+          className="settings-row settings-pig-growth-toggle"
+          type="button"
+          aria-expanded={isPigGrowthExpanded}
+          aria-controls="settings-pig-growth"
+          onClick={() => setIsPigGrowthExpanded((expanded) => !expanded)}
+        >
           <span><small>成长</small><strong>Lv.{state.pig.level}</strong></span>
-          <Pig level={state.pig.level} size="small" decorative />
-        </div>
+          <span
+            className={[
+              'settings-pig-growth-toggle__arrow',
+              isPigGrowthExpanded
+                ? 'settings-pig-growth-toggle__arrow--expanded'
+                : '',
+            ].filter(Boolean).join(' ')}
+            aria-hidden="true"
+          >
+            ›
+          </span>
+        </button>
+        {isPigGrowthExpanded ? (
+          <div className="settings-pig-growth" id="settings-pig-growth">
+            <div className="settings-pig-growth__copy">
+              <strong>
+                小猪陪你完成了 {pigGrowth.foldedCardCount} 次行动
+              </strong>
+              <small>
+                {pigGrowth.nextLevel
+                  ? `再完成 ${pigGrowth.cardsUntilNextLevel} 次行动，小猪就会成长到 Lv.${pigGrowth.nextLevel}`
+                  : '小猪已经陪你成长到 Lv.5 啦'}
+              </small>
+            </div>
+            <div
+              className="settings-pig-growth__track"
+              role="progressbar"
+              aria-label={
+                pigGrowth.nextLevel
+                  ? `前往 Lv.${pigGrowth.nextLevel} 的成长进度`
+                  : '小猪已经到达最高等级'
+              }
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(pigGrowth.levelProgress * 100)}
+            >
+              <span
+                className="settings-pig-growth__fill"
+                style={{ width: `${pigGrowth.levelProgress * 100}%` }}
+              >
+                <img
+                  src={GROWTH_STAR_LOGO.src}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                />
+              </span>
+            </div>
+            <small className="settings-pig-growth__count">
+              {pigGrowth.nextLevelTotal
+                ? `${pigGrowth.foldedCardCount} / ${pigGrowth.nextLevelTotal} 次`
+                : `${pigGrowth.foldedCardCount} 次`}
+            </small>
+          </div>
+        ) : null}
       </SettingsCard>
 
       <SettingsCard
@@ -805,7 +869,7 @@ export default function SettingsPage() {
       {activeSheet === 'pig' ? (
         <SettingsSheet title="小猪" onClose={closeSheet}>
           <div className="settings-pig-preview">
-            <Pig level={state.pig.level} size="large" decorative />
+            <Pig level={1} size="large" decorative />
             <span>成长 · Lv.{state.pig.level}</span>
           </div>
           <form

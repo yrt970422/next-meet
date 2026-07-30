@@ -12,7 +12,9 @@ This directory contains visual assets for the reusable `Pig` component.
   cream sticker edges.
 - The original square concept sheet is preserved at
   `reference/pig-level-1-concept.png` for visual reference only.
-- Levels 2–5 intentionally have no visual assets yet.
+- Levels 2–5 have approved idle assets used by the HomePage growth system.
+- Level 2 intentionally uses `pig-level-2-idle-v2.png`, whose minimal dot eyes have no
+  highlights and remain consistent with the default pig face.
 - Missing level assets resolve to the matching Level 1 pose when available, then to Level 1
   `idle`.
 - A fallback is exposed by the component through `data-asset-fallback="true"`.
@@ -33,13 +35,13 @@ pig/
 │   ├── pig-level-1-workout-complete.png
 │   └── pig-level-1-sleep-complete.png
 ├── level-2/
-│   └── pig-level-2-idle.png
+│   └── pig-level-2-idle-v2.png
 ├── level-3/
-│   └── pig-level-3-idle.png
+│   └── pig-level-3-idle-v2.png
 ├── level-4/
-│   └── pig-level-4-idle.png
+│   └── pig-level-4-idle-v2.png
 └── level-5/
-    └── pig-level-5-idle.png
+    └── pig-level-5-idle-v2.png
 ```
 
 Create level directories only when their approved assets exist. Register every new asset in `index.ts`; do not infer paths at runtime.

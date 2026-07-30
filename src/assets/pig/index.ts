@@ -5,6 +5,10 @@ import level1BodyCareComplete from './level-1/feedback/pig-level-1-body-care-com
 import level1EncourageComplete from './level-1/feedback/pig-level-1-encourage-complete-v2.png'
 import level1LearningComplete from './level-1/feedback/pig-level-1-learning-complete-v2.png'
 import level1WorkComplete from './level-1/feedback/pig-level-1-work-complete-v2.png'
+import level2Idle from './level-2/pig-level-2-idle-v2.png'
+import level3Idle from './level-3/pig-level-3-idle-v2.png'
+import level4Idle from './level-4/pig-level-4-idle-v2.png'
+import level5Idle from './level-5/pig-level-5-idle-v2.png'
 import type { PigLevel } from '../../types/pig'
 
 export const PIG_POSES = [
@@ -74,6 +78,29 @@ const level1EncourageCompleteAsset: PigAsset = {
   src: level1EncourageComplete,
 }
 
+const growthIdleAssets = {
+  2: {
+    level: 2,
+    pose: 'idle',
+    src: level2Idle,
+  },
+  3: {
+    level: 3,
+    pose: 'idle',
+    src: level3Idle,
+  },
+  4: {
+    level: 4,
+    pose: 'idle',
+    src: level4Idle,
+  },
+  5: {
+    level: 5,
+    pose: 'idle',
+    src: level5Idle,
+  },
+} as const satisfies Record<2 | 3 | 4 | 5, PigAsset>
+
 const pigAssetRegistry: PigAssetRegistry = {
   1: {
     idle: level1Asset,
@@ -84,18 +111,26 @@ const pigAssetRegistry: PigAssetRegistry = {
     'work-complete': level1WorkCompleteAsset,
     'encourage-complete': level1EncourageCompleteAsset,
   },
-  2: {},
-  3: {},
-  4: {},
-  5: {},
+  2: {
+    idle: growthIdleAssets[2],
+  },
+  3: {
+    idle: growthIdleAssets[3],
+  },
+  4: {
+    idle: growthIdleAssets[4],
+  },
+  5: {
+    idle: growthIdleAssets[5],
+  },
 }
 
 export const PIG_LEVEL_ASSET_STATUS = {
   1: 'ready',
-  2: 'fallback',
-  3: 'fallback',
-  4: 'fallback',
-  5: 'fallback',
+  2: 'ready',
+  3: 'ready',
+  4: 'ready',
+  5: 'ready',
 } as const satisfies Record<PigLevel, 'ready' | 'fallback'>
 
 export function resolvePigAsset(level: PigLevel, pose: PigPose = 'idle'): ResolvedPigAsset {

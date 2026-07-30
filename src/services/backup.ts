@@ -10,6 +10,7 @@ import type {
   Pig,
   UserSettings,
 } from '../types/models'
+import { synchronizePigGrowth } from './pigGrowth'
 
 export const NEXT_MEET_BACKUP_FORMAT = 'next-meet-backup'
 export const NEXT_MEET_BACKUP_VERSION = 1
@@ -342,7 +343,7 @@ export function parseNextMeetBackup(raw: string): ParsedBackup {
     throw new Error('这不是有效的 next-meet 备份，或备份版本暂不支持。')
   }
 
-  const state = validateAppState(parsed.data)
+  const state = synchronizePigGrowth(validateAppState(parsed.data))
   const backup = parsed as unknown as NextMeetBackup
   return {
     backup,
