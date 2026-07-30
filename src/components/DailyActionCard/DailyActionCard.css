@@ -21,7 +21,7 @@
     ),
     color-mix(in srgb, var(--daily-soft) 35%, var(--color-paper-warm));
   box-shadow: var(--paper-shadow);
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   will-change: transform, opacity;
 }

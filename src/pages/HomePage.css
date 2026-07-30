@@ -76,11 +76,15 @@
 }
 
 .home-hero__title {
+  width: 100%;
+  overflow: hidden;
   margin: var(--space-2) 0 var(--space-1);
   color: var(--color-text);
   font-size: var(--type-title);
   font-weight: 750;
   line-height: var(--leading-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-hero__date {

@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -258,6 +260,72 @@ export default function SettingsPage() {
         : 'ios',
   )
   const importInputRef = useRef<HTMLInputElement | null>(null)
+  const installSectionRef = useRef<HTMLElement | null>(null)
+  const shouldPositionInstall = useRef(false)
+  const isSettingsPanelOpen = activeSheet !== null
+
+  useLayoutEffect(() => {
+    const section = installSectionRef.current
+    if (!isInstallExpanded || !shouldPositionInstall.current || !section) {
+      return
+    }
+
+    shouldPositionInstall.current = false
+    section.classList.add('is-positioning')
+
+    const bounds = section.getBoundingClientRect()
+    const topClearance = 16
+    const bottomClearance = 96
+    const visibleBottom = window.innerHeight - bottomClearance
+
+    if (bounds.bottom > visibleBottom) {
+      window.scrollBy(0, bounds.bottom - visibleBottom)
+    }
+
+    const adjustedBounds = section.getBoundingClientRect()
+    if (adjustedBounds.top < topClearance) {
+      window.scrollBy(0, adjustedBounds.top - topClearance)
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      section.classList.remove('is-positioning')
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      section.classList.remove('is-positioning')
+    }
+  }, [isInstallExpanded])
+
+  useEffect(() => {
+    if (!isSettingsPanelOpen) {
+      return
+    }
+
+    const scrollPosition = window.scrollY
+    const root = document.documentElement
+    const body = document.body
+    const previousRootOverflow = root.style.overflow
+    const previousBodyOverflow = body.style.overflow
+    const previousBodyPosition = body.style.position
+    const previousBodyTop = body.style.top
+    const previousBodyWidth = body.style.width
+
+    root.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollPosition}px`
+    body.style.width = '100%'
+
+    return () => {
+      root.style.overflow = previousRootOverflow
+      body.style.overflow = previousBodyOverflow
+      body.style.position = previousBodyPosition
+      body.style.top = previousBodyTop
+      body.style.width = previousBodyWidth
+      window.scrollTo(0, scrollPosition)
+    }
+  }, [isSettingsPanelOpen])
 
   const daysUntil = activeCycle
     ? Math.max(
@@ -627,6 +695,7 @@ export default function SettingsPage() {
       </SettingsCard>
 
       <section
+        ref={installSectionRef}
         className={[
           'settings-card',
           'settings-install',
@@ -638,7 +707,12 @@ export default function SettingsPage() {
           type="button"
           aria-expanded={isInstallExpanded}
           aria-controls="settings-install-details"
-          onClick={() => setIsInstallExpanded((isExpanded) => !isExpanded)}
+          onClick={() => {
+            if (!isInstallExpanded) {
+              shouldPositionInstall.current = true
+            }
+            setIsInstallExpanded((isExpanded) => !isExpanded)
+          }}
         >
           <span className="settings-card__icon" aria-hidden="true">
             {settingsSectionIcon('install')}

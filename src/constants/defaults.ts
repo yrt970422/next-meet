@@ -326,7 +326,7 @@ export function getDefaultAppState(openedAt = new Date()): AppState {
       {
         id: 'todo-fold-card-guide',
         cycleId,
-        text: '完成一项行动后，向右下角滑动卡片来折卡哦~',
+        text: '完成一项行动后，向右滑动卡片来折卡哦~',
         completed: false,
         createdAt,
       },

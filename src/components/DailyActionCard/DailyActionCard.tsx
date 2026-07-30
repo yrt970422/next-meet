@@ -67,6 +67,7 @@ export function DailyActionCard({
     showNote: false,
   })
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
+  const dragIntent = useRef<'pending' | 'horizontal' | 'vertical'>('pending')
   const dragOffsetRef = useRef(dragOffset)
   const foldTimer = useRef<number | null>(null)
   const singleLineMeasureRef = useRef<HTMLSpanElement | null>(null)
@@ -155,6 +156,7 @@ export function DailyActionCard({
 
   const resetDrag = () => {
     dragOrigin.current = null
+    dragIntent.current = 'pending'
     setIsDragging(false)
     updateDragOffset({ x: 0, y: 0 })
   }
@@ -169,8 +171,8 @@ export function DailyActionCard({
     setIsDragging(false)
     setIsCommitting(true)
     updateDragOffset({
-      x: Math.max(currentOffset.x, 42),
-      y: Math.max(currentOffset.y, 54),
+      x: Math.max(currentOffset.x, 120),
+      y: 0,
     })
 
     foldTimer.current = window.setTimeout(() => {
@@ -193,25 +195,47 @@ export function DailyActionCard({
       return
     }
 
-    event.currentTarget.setPointerCapture(event.pointerId)
     dragOrigin.current = { x: event.clientX, y: event.clientY }
-    setIsDragging(true)
+    dragIntent.current = 'pending'
   }
 
   const handlePointerMove = (event: PointerEvent<HTMLElement>) => {
-    if (!dragOrigin.current || !isDragging) {
+    if (!dragOrigin.current) {
+      return
+    }
+
+    const deltaX = event.clientX - dragOrigin.current.x
+    const deltaY = event.clientY - dragOrigin.current.y
+    const absoluteX = Math.abs(deltaX)
+    const absoluteY = Math.abs(deltaY)
+
+    if (dragIntent.current === 'pending') {
+      if (absoluteX < 8 && absoluteY < 8) {
+        return
+      }
+
+      if (deltaX > 0 && absoluteX >= absoluteY * 1.15) {
+        dragIntent.current = 'horizontal'
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setIsDragging(true)
+      } else {
+        dragIntent.current = 'vertical'
+        setIsDragging(false)
+        updateDragOffset({ x: 0, y: 0 })
+        return
+      }
+    }
+
+    if (dragIntent.current !== 'horizontal') {
       return
     }
 
     updateDragOffset({
       x: Math.min(
         MAX_DRAG_DISTANCE,
-        Math.max(0, event.clientX - dragOrigin.current.x),
+        Math.max(0, deltaX),
       ),
-      y: Math.min(
-        MAX_DRAG_DISTANCE,
-        Math.max(0, event.clientY - dragOrigin.current.y),
-      ),
+      y: 0,
     })
   }
 
@@ -224,8 +248,9 @@ export function DailyActionCard({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
 
-    const distance = Math.hypot(dragOffsetRef.current.x, dragOffsetRef.current.y)
+    const distance = dragOffsetRef.current.x
     dragOrigin.current = null
+    dragIntent.current = 'pending'
     if (distance >= FOLD_THRESHOLD) {
       commitFold()
     } else {
@@ -247,8 +272,8 @@ export function DailyActionCard({
   const cardTransform = isFolded
     ? 'translate(2px, -1px) rotate(-0.8deg) scale(0.992)'
     : isCommitting
-      ? `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) rotate(7deg) scale(0.86)`
-      : `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) rotate(${progress * 5}deg) scale(${
+      ? `translate3d(${dragOffset.x}px, 0, 0) rotate(5deg) scale(0.86)`
+      : `translate3d(${dragOffset.x}px, 0, 0) rotate(${progress * 4}deg) scale(${
           1 - progress * 0.025
         })`
 
@@ -272,7 +297,7 @@ export function DailyActionCard({
       aria-label={
         isFolded
           ? `${action.name}已完成`
-          : `向下或向右拖动，折下${action.name}卡`
+          : `向右拖动，折下${action.name}卡`
       }
       style={{
         transform: cardTransform,

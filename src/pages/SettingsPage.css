@@ -362,6 +362,12 @@
   padding-top: var(--space-3);
 }
 
+.settings-install.is-positioning .settings-install__chevron,
+.settings-install.is-positioning .settings-install__collapsible,
+.settings-install.is-positioning .settings-install__content {
+  transition: none;
+}
+
 .settings-install__device-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -521,6 +527,8 @@
   width: min(100%, 560px);
   max-height: min(82vh, 720px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
   padding: var(--card-padding);
   border: var(--paper-border);

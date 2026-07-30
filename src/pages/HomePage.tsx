@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppState } from '../app/providers/useAppState'
 import type { PigPose } from '../assets/pig'
@@ -92,6 +92,7 @@ export default function HomePage() {
   const [actionPageStart, setActionPageStart] = useState(0)
   const [todoDraft, setTodoDraft] = useState('')
   const pigFeedbackTimer = useRef<number | null>(null)
+  const cycleTitleRef = useRef<HTMLHeadingElement | null>(null)
   const activeCycle = resolveCurrentCycle(
     state.cycles,
     state.activeCycleId,
@@ -230,6 +231,34 @@ export default function HomePage() {
       </>
     )
 
+  useLayoutEffect(() => {
+    const title = cycleTitleRef.current
+    if (!title) {
+      return
+    }
+
+    const fitTitleOnOneLine = () => {
+      const typeSizes = [
+        'var(--type-title)',
+        'var(--type-section-title)',
+        'var(--type-body)',
+        'var(--type-caption)',
+        'var(--type-tiny)',
+      ]
+
+      for (const typeSize of typeSizes) {
+        title.style.fontSize = typeSize
+        if (title.scrollWidth <= title.clientWidth + 1) {
+          break
+        }
+      }
+    }
+
+    fitTitleOnOneLine()
+    window.addEventListener('resize', fitTitleOnOneLine)
+    return () => window.removeEventListener('resize', fitTitleOnOneLine)
+  }, [activeCycle?.title])
+
   useEffect(() => {
     return () => {
       if (pigFeedbackTimer.current !== null) {
@@ -271,7 +300,11 @@ export default function HomePage() {
           <div className="home-hero__countdown" aria-label={countdownAriaLabel}>
             {countdownContent}
           </div>
-          <h2 className="home-hero__title" id="home-cycle-title">
+          <h2
+            ref={cycleTitleRef}
+            className="home-hero__title"
+            id="home-cycle-title"
+          >
             {activeCycle?.title ?? '定下下一场见面的日子'}
           </h2>
           {activeCycle?.targetDate ? (
