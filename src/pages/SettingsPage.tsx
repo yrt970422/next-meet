@@ -587,7 +587,11 @@ export default function SettingsPage() {
           aria-controls="settings-pig-growth"
           onClick={() => setIsPigGrowthExpanded((expanded) => !expanded)}
         >
-          <span><small>成长</small><strong>Lv.{state.pig.level}</strong></span>
+          <span className="settings-pig-growth-toggle__label">
+            <small>成长</small>
+            <strong>Lv.{state.pig.level}</strong>
+          </span>
+          <Pig level={state.pig.level} size="small" decorative />
           <span
             className={[
               'settings-pig-growth-toggle__arrow',
