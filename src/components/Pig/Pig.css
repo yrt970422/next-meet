@@ -1,5 +1,7 @@
 .pig {
+  position: relative;
   display: inline-grid;
+  overflow: visible;
   flex: 0 0 auto;
   place-items: center;
   aspect-ratio: 1;
@@ -23,9 +25,70 @@
 }
 
 .pig__image {
+  position: relative;
+  z-index: 1;
   display: block;
   inline-size: 100%;
   block-size: 100%;
   object-fit: contain;
+  opacity: 0;
   user-select: none;
+  transition: opacity 180ms ease;
+}
+
+.pig__image--loaded {
+  opacity: 1;
+}
+
+.pig__placeholder {
+  position: absolute;
+  inset: 18%;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid rgb(205 125 133 / 18%);
+  border-radius: 48% 46% 44% 50%;
+  color: #e8b85d;
+  background:
+    radial-gradient(circle at 36% 34%, rgb(255 255 255 / 65%) 0 8%, transparent 28%),
+    #f8dfe0;
+  box-shadow: 0 2px 8px rgb(93 64 51 / 5%);
+}
+
+.pig__placeholder span {
+  font-size: clamp(0.75rem, 12%, 1.25rem);
+  line-height: 1;
+}
+
+.pig__placeholder--loading {
+  animation: pig-placeholder-breathe 1.5s ease-in-out infinite;
+}
+
+.pig__placeholder--error {
+  inset: 22%;
+  border-style: dashed;
+  background: #f9e9e5;
+}
+
+@keyframes pig-placeholder-breathe {
+  0%,
+  100% {
+    opacity: 0.58;
+    transform: scale(0.97);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pig__image {
+    transition: none;
+  }
+
+  .pig__placeholder--loading {
+    animation: none;
+  }
 }

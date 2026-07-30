@@ -1,5 +1,6 @@
 import { resolvePigAsset, type PigPose } from '../../assets/pig'
 import type { PigLevel } from '../../types/pig'
+import { PigImage } from './PigImage'
 import './Pig.css'
 
 export type PigSize = 'small' | 'medium' | 'large' | 'hero'
@@ -26,6 +27,7 @@ export function Pig({
   loading = 'lazy',
 }: PigProps) {
   const asset = resolvePigAsset(level, pose)
+  const defaultAsset = resolvePigAsset(1, 'idle')
   const classNames = ['pig', `pig--${size}`, className].filter(Boolean).join(' ')
   const accessibleName = decorative ? '' : (alt ?? name)
 
@@ -37,13 +39,13 @@ export function Pig({
       data-asset-level={asset.level}
       data-asset-fallback={asset.isFallback ? 'true' : 'false'}
     >
-      <img
-        className="pig__image"
-        src={asset.src}
+      <PigImage
+        key={`${asset.src}:${asset.fallbackSrc}`}
+        asset={asset}
+        defaultAsset={defaultAsset}
         alt={accessibleName}
-        aria-hidden={decorative || undefined}
+        decorative={decorative}
         loading={loading}
-        draggable={false}
       />
     </span>
   )

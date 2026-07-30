@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppState } from '../app/providers/useAppState'
-import type { PigPose } from '../assets/pig'
+import { preloadPigAsset, type PigPose } from '../assets/pig'
 import { DailyActionCard } from '../components/DailyActionCard'
 import { Pig } from '../components/Pig'
 import { resolveCurrentCycle } from '../services/currentCycle'
@@ -200,6 +200,9 @@ export default function HomePage() {
           ],
         ]
   const visibleActionIds = visibleActions.map((action) => action.id).join('|')
+  const visibleFeedbackPoseKey = visibleActions
+    .map((action) => FEEDBACK_POSES[action.category])
+    .join('|')
   const canRecordToday =
     Boolean(activeCycle) &&
     today >= (activeCycle?.startDate ?? '') &&
@@ -266,6 +269,21 @@ export default function HomePage() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    preloadPigAsset(pigLevel, 'idle', 'high')
+    preloadPigAsset(1, 'idle', 'high')
+
+    const feedbackPreloadTimer = window.setTimeout(() => {
+      visibleFeedbackPoseKey.split('|').forEach((pose) => {
+        if (pose) {
+          preloadPigAsset(1, pose as PigPose, 'low')
+        }
+      })
+    }, 500)
+
+    return () => window.clearTimeout(feedbackPreloadTimer)
+  }, [pigLevel, visibleFeedbackPoseKey])
 
   useEffect(() => {
     if (!visibleActionIds) {

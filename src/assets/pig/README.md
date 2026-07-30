@@ -10,6 +10,10 @@ This directory contains visual assets for the reusable `Pig` component.
   - `sleep-complete` at `level-1/pig-level-1-sleep-complete.png`.
 - All Level 1 production assets are square RGBA PNGs with transparent backgrounds and built-in
   cream sticker edges.
+- Runtime rendering uses the versioned `*-web-v1.webp` derivatives, with resized and
+  palette-optimized `*-web-v1.png` derivatives as compatibility and network-error fallbacks.
+  Approved full-resolution PNG masters remain in the asset folders but are not imported into
+  the web bundle.
 - The original square concept sheet is preserved at
   `reference/pig-level-1-concept.png` for visual reference only.
 - Levels 2–5 have approved idle assets used by the HomePage growth system.
@@ -18,6 +22,8 @@ This directory contains visual assets for the reusable `Pig` component.
 - Missing level assets resolve to the matching Level 1 pose when available, then to Level 1
   `idle`.
 - A fallback is exposed by the component through `data-asset-fallback="true"`.
+- `PigImage` hides partial downloads behind a warm placeholder, retries the matching PNG, then
+  falls back to the Level 1 idle WebP/PNG pair before showing the final placeholder.
 
 Components must not rely on a background, shadow, notebook texture, or framing baked into the
 production character asset.
