@@ -32,6 +32,7 @@ type ActiveSheet =
   | 'cycle'
   | 'actions'
   | 'action-form'
+  | 'data'
   | 'data-import'
 
 interface ActionPreset {
@@ -248,6 +249,14 @@ export default function SettingsPage() {
   const [actionError, setActionError] = useState('')
   const [pendingImport, setPendingImport] = useState<ParsedBackup | null>(null)
   const [dataMessage, setDataMessage] = useState('')
+  const [isInstallExpanded, setIsInstallExpanded] = useState(false)
+  const [installDevice, setInstallDevice] = useState<'ios' | 'android'>(
+    () =>
+      typeof navigator !== 'undefined' &&
+      /android/i.test(navigator.userAgent)
+        ? 'android'
+        : 'ios',
+  )
   const importInputRef = useRef<HTMLInputElement | null>(null)
 
   const daysUntil = activeCycle
@@ -409,8 +418,8 @@ export default function SettingsPage() {
       if (canShareFile) {
         try {
           await navigator.share({
-            title: 'next-meet 数据备份',
-            text: '保存这份备份，可以在另一台设备恢复 next-meet。',
+            title: 'next-meet 搬家记录',
+            text: '保存这份记录，可以在另一台设备找回小猪和这段陪伴。',
             files: [file],
           })
         } catch (error) {
@@ -422,12 +431,12 @@ export default function SettingsPage() {
       } else {
         downloadBackupFile(file)
       }
-      setDataMessage('备份已经准备好啦')
+      setDataMessage('搬家记录已经准备好啦')
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
       }
-      setDataMessage('导出失败，请稍后再试')
+      setDataMessage('暂时没能保存，请稍后再试')
     }
   }
 
@@ -440,7 +449,7 @@ export default function SettingsPage() {
 
     setDataMessage('')
     if (file.size > NEXT_MEET_BACKUP_MAX_BYTES) {
-      setDataMessage('备份文件过大，无法读取')
+      setDataMessage('这份搬家记录太大，暂时无法读取')
       return
     }
 
@@ -448,9 +457,9 @@ export default function SettingsPage() {
       const parsedBackup = parseNextMeetBackup(await file.text())
       setPendingImport(parsedBackup)
       setActiveSheet('data-import')
-    } catch (error) {
+    } catch {
       setDataMessage(
-        error instanceof Error ? error.message : '无法读取这个备份文件。',
+        '没能认出这份搬家记录，请选择从 next-meet 保存的记录。',
       )
     }
   }
@@ -462,7 +471,7 @@ export default function SettingsPage() {
     replaceAppState(pendingImport.state)
     setPendingImport(null)
     setActiveSheet(null)
-    setDataMessage('已经恢复到备份里的样子')
+    setDataMessage('小猪和记录都回来啦')
   }
 
   const cycleWeeks = activeCycle
@@ -471,6 +480,14 @@ export default function SettingsPage() {
   const weeklyFrequency = actionDraft
     ? Math.round((actionDraft.targetCount / cycleWeeks) * 10) / 10
     : 0
+  const installSteps =
+    installDevice === 'android'
+      ? ['点击浏览器菜单', '选择「添加到主屏幕」', '点击添加']
+      : [
+          '点击浏览器底部的分享按钮',
+          '选择「添加到主屏幕」',
+          '点击添加',
+        ]
 
   return (
     <section className="settings-page" aria-label="设置">
@@ -491,7 +508,7 @@ export default function SettingsPage() {
           <span aria-hidden="true">›</span>
         </button>
         <div className="settings-row settings-row--static">
-          <span><small>当前形象</small><strong>Lv.{state.pig.level}</strong></span>
+          <span><small>成长</small><strong>Lv.{state.pig.level}</strong></span>
           <Pig level={state.pig.level} size="small" decorative />
         </div>
       </SettingsCard>
@@ -567,25 +584,41 @@ export default function SettingsPage() {
         title="我的数据"
         className="settings-data"
       >
-        <p>把周期、行动、记录和小猪一起带到另一台设备。</p>
-        <div className="settings-data__actions">
-          <button type="button" onClick={handleExportBackup}>
-            导出备份
-          </button>
+        <div className="settings-data__list">
+          <section className="settings-data__item">
+            <h3>你的记录属于你自己</h3>
+            <p>
+              next-meet 不会上传你的日记、打卡和生活记录。
+              你的数据会保存在当前设备中，只有你能看到。
+            </p>
+          </section>
+          <section className="settings-data__item">
+            <h3>使用普通浏览模式保存小猪的记忆</h3>
+            <p>
+              为了让小猪记住你的陪伴，请使用普通浏览模式打开
+              next-meet，给小猪一个稳定的小家。无痕或隐私浏览模式
+              可能会在关闭页面后清除记录。
+            </p>
+          </section>
           <button
+            className="settings-data__move"
             type="button"
-            onClick={() => importInputRef.current?.click()}
+            onClick={() => setActiveSheet('data')}
           >
-            导入备份
+            <span>
+              <strong>带着小猪搬家</strong>
+              <small>换设备时，把小猪和成长记录一起带走。</small>
+            </span>
+            <span aria-hidden="true">›</span>
           </button>
-          <input
-            ref={importInputRef}
-            className="settings-data__file-input"
-            type="file"
-            accept=".json,.nextmeet.json,application/json"
-            onChange={handleImportFile}
-          />
         </div>
+        <input
+          ref={importInputRef}
+          className="settings-data__file-input"
+          type="file"
+          accept=".json,.nextmeet.json,application/json"
+          onChange={handleImportFile}
+        />
         {dataMessage ? (
           <small className="settings-data__message" role="status">
             {dataMessage}
@@ -593,11 +626,113 @@ export default function SettingsPage() {
         ) : null}
       </SettingsCard>
 
+      <section
+        className={[
+          'settings-card',
+          'settings-install',
+          isInstallExpanded ? 'is-expanded' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        <button
+          className="settings-install__summary"
+          type="button"
+          aria-expanded={isInstallExpanded}
+          aria-controls="settings-install-details"
+          onClick={() => setIsInstallExpanded((isExpanded) => !isExpanded)}
+        >
+          <span className="settings-card__icon" aria-hidden="true">
+            {settingsSectionIcon('install')}
+          </span>
+          <span className="settings-install__summary-copy">
+            <strong>把 next-meet 放到桌面</strong>
+            <small>
+              把 next-meet 添加到手机桌面，就可以像打开 App 一样，
+              每天回来看看小猪。
+            </small>
+          </span>
+          <span className="settings-install__chevron" aria-hidden="true">›</span>
+        </button>
+        <div
+          id="settings-install-details"
+          className="settings-install__collapsible"
+          aria-hidden={!isInstallExpanded}
+        >
+          <div className="settings-install__content">
+            <div
+              className="settings-install__device-picker"
+              role="group"
+              aria-label="选择设备"
+            >
+              <button
+                className={installDevice === 'ios' ? 'is-selected' : ''}
+                type="button"
+                tabIndex={isInstallExpanded ? 0 : -1}
+                aria-pressed={installDevice === 'ios'}
+                onClick={() => setInstallDevice('ios')}
+              >
+                iPhone
+              </button>
+              <button
+                className={installDevice === 'android' ? 'is-selected' : ''}
+                type="button"
+                tabIndex={isInstallExpanded ? 0 : -1}
+                aria-pressed={installDevice === 'android'}
+                onClick={() => setInstallDevice('android')}
+              >
+                Android
+              </button>
+            </div>
+            <div className="settings-install__steps">
+              <ol>
+                {installSteps.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {activeSheet === 'data' ? (
+        <SettingsSheet title="带着小猪搬家" onClose={closeSheet}>
+          <div className="settings-move">
+            <div className="settings-move__illustration" aria-hidden="true">
+              <img
+                src={SETTINGS_SECTION_LOGOS.pig}
+                alt=""
+                draggable={false}
+              />
+            </div>
+            <div>
+              <h3>换设备，也把这段陪伴一起带走</h3>
+              <p>
+                先保存一份小猪的成长记录，再在新设备中找回它。
+                周期、行动、记录和小猪都会回到原来的样子。
+              </p>
+            </div>
+            <div className="settings-move__actions">
+              <button
+                className="settings-primary-button"
+                type="button"
+                onClick={handleExportBackup}
+              >
+                保存搬家记录
+              </button>
+              <button
+                className="settings-secondary-button"
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+              >
+                恢复搬家记录
+              </button>
+            </div>
+          </div>
+        </SettingsSheet>
+      ) : null}
+
       {activeSheet === 'pig' ? (
         <SettingsSheet title="小猪" onClose={closeSheet}>
           <div className="settings-pig-preview">
             <Pig level={state.pig.level} size="large" decorative />
-            <span>当前形象 · Lv.{state.pig.level}</span>
+            <span>成长 · Lv.{state.pig.level}</span>
           </div>
           <form
             className="settings-form"
@@ -831,12 +966,12 @@ export default function SettingsPage() {
       ) : null}
 
       {activeSheet === 'data-import' && pendingImport ? (
-        <SettingsSheet title="恢复这份备份" onClose={closeSheet}>
+        <SettingsSheet title="找回小猪和记录" onClose={closeSheet}>
           <div className="settings-import">
-            <p>这份备份包含：</p>
+            <p>这份搬家记录里有：</p>
             <dl>
               <div>
-                <dt>备份时间</dt>
+                <dt>保存时间</dt>
                 <dd>{formatBackupDate(pendingImport.summary.exportedAt)}</dd>
               </div>
               <div>
@@ -864,21 +999,22 @@ export default function SettingsPage() {
               </div>
             </dl>
             <p className="settings-import__warning">
-              导入会替换这台设备当前的全部 next-meet 数据。原有数据不会与备份合并。
+              恢复后，这台设备会回到保存搬家记录时的样子。
+              现在的内容不会和它混在一起。
             </p>
             <button
               className="settings-primary-button"
               type="button"
               onClick={confirmImport}
             >
-              导入并恢复
+              确认恢复
             </button>
             <button
               className="settings-secondary-button"
               type="button"
               onClick={closeSheet}
             >
-              先不导入
+              再想想
             </button>
           </div>
         </SettingsSheet>
