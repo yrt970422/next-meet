@@ -1,6 +1,5 @@
 import { AppProvider } from './app/providers/AppProvider'
 import { AppRouter } from './app/router'
-import './App.css'
 
 function App() {
   return (

@@ -1,39 +1,42 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type PointerEvent,
 } from 'react'
-import { resolveDailyActionLogo } from '../../assets/cards'
+import { resolveActionCategoryLogo } from '../../assets/cards'
+import type { PigPose } from '../../assets/pig'
+import type {
+  Action,
+  ActionCategory,
+  ActivityRecord,
+} from '../../types/models'
 import { Pig } from '../Pig'
-import type { ActivityRecord, ExerciseType } from '../../types/models'
 import './DailyActionCard.css'
 
 const FOLD_THRESHOLD = 80
 const MAX_DRAG_DISTANCE = 150
 const FOLD_COMMIT_DURATION = 340
+const INLINE_NOTE_TITLE_LINE_LIMIT = 2
 
-interface DailyActionCardBaseProps {
+const CATEGORY_POSES: Record<ActionCategory, PigPose> = {
+  health: 'workout-complete',
+  bodyCare: 'body-care-complete',
+  rest: 'sleep-complete',
+  learning: 'learning-complete',
+  work: 'work-complete',
+  custom: 'encourage-complete',
+}
+
+export interface DailyActionCardProps {
+  action: Action
   record: ActivityRecord | null
   onFold: () => void
   onFoldSuccess?: () => void
   disabled?: boolean
 }
-
-interface WorkoutCardProps extends DailyActionCardBaseProps {
-  category: 'workout'
-  selectedExercise: ExerciseType
-  exerciseTypes: ExerciseType[]
-  onCycleType: () => void
-}
-
-interface SleepCardProps extends DailyActionCardBaseProps {
-  category: 'sleep'
-  targetTime: string
-}
-
-export type DailyActionCardProps = WorkoutCardProps | SleepCardProps
 
 function formatRecordedTime(recordedAt: string) {
   const date = new Date(recordedAt)
@@ -48,42 +51,29 @@ function formatRecordedTime(recordedAt: string) {
   }).format(date)
 }
 
-export function DailyActionCard(props: DailyActionCardProps) {
+export function DailyActionCard({
+  action,
+  record,
+  onFold,
+  onFoldSuccess,
+  disabled = false,
+}: DailyActionCardProps) {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [isCommitting, setIsCommitting] = useState(false)
   const [isAwaitingRecord, setIsAwaitingRecord] = useState(false)
+  const [titleLayout, setTitleLayout] = useState({
+    isInline: false,
+    showNote: false,
+  })
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
   const dragOffsetRef = useRef(dragOffset)
   const foldTimer = useRef<number | null>(null)
-  const currentRecord = props.record
-  const handleFoldSuccess = props.onFoldSuccess
-  const isFolded = currentRecord !== null
-  const recordedExercise =
-    props.category === 'workout'
-      ? props.exerciseTypes.find(
-          (exerciseType) =>
-            exerciseType.id === props.record?.metadata?.exerciseTypeId,
-        )
-      : null
-  const activeExercise =
-    props.category === 'workout'
-      ? (recordedExercise ?? props.selectedExercise)
-      : null
-  const presentation =
-    props.category === 'workout'
-      ? {
-          label: activeExercise?.name ?? '运动',
-          target:
-            activeExercise?.category === 'strength'
-              ? '60 分钟'
-              : '30 分钟',
-        }
-      : {
-          label: '早点休息',
-          target: '',
-        }
-  const logo = resolveDailyActionLogo(props.category)
+  const singleLineMeasureRef = useRef<HTMLSpanElement | null>(null)
+  const wrappedTitleMeasureRef = useRef<HTMLSpanElement | null>(null)
+  const isFolded = record !== null
+  const logo = resolveActionCategoryLogo(action.category)
+  const smallLogo = resolveActionCategoryLogo(action.category, 'small')
   const progress = Math.min(
     1,
     Math.hypot(dragOffset.x, dragOffset.y) / FOLD_THRESHOLD,
@@ -98,19 +88,65 @@ export function DailyActionCard(props: DailyActionCardProps) {
   }, [])
 
   useEffect(() => {
-    if (!isAwaitingRecord || !currentRecord) {
+    if (!isAwaitingRecord || !record) {
       return
     }
 
     const confirmationTimer = window.setTimeout(() => {
       setIsAwaitingRecord(false)
-      handleFoldSuccess?.()
+      onFoldSuccess?.()
     }, 0)
 
-    return () => {
-      window.clearTimeout(confirmationTimer)
+    return () => window.clearTimeout(confirmationTimer)
+  }, [isAwaitingRecord, onFoldSuccess, record])
+
+  useLayoutEffect(() => {
+    if (isFolded) {
+      return
     }
-  }, [currentRecord, handleFoldSuccess, isAwaitingRecord])
+
+    const singleLineMeasure = singleLineMeasureRef.current
+    const wrappedTitleMeasure = wrappedTitleMeasureRef.current
+    if (!singleLineMeasure || !wrappedTitleMeasure) {
+      return
+    }
+
+    const measureTitle = () => {
+      const isInline =
+        singleLineMeasure.scrollWidth > singleLineMeasure.clientWidth + 1
+      const lineHeight = Number.parseFloat(
+        window.getComputedStyle(wrappedTitleMeasure).lineHeight,
+      )
+      const wrappedLines =
+        lineHeight > 0
+          ? Math.ceil(wrappedTitleMeasure.scrollHeight / lineHeight)
+          : INLINE_NOTE_TITLE_LINE_LIMIT + 1
+      const showNote =
+        isInline &&
+        Boolean(action.note.trim()) &&
+        wrappedLines <= INLINE_NOTE_TITLE_LINE_LIMIT
+
+      setTitleLayout((current) =>
+        current.isInline === isInline && current.showNote === showNote
+          ? current
+          : { isInline, showNote },
+      )
+    }
+
+    measureTitle()
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(measureTitle)
+    resizeObserver?.observe(singleLineMeasure)
+    resizeObserver?.observe(wrappedTitleMeasure)
+    window.addEventListener('resize', measureTitle)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', measureTitle)
+    }
+  }, [action.name, action.note, isFolded])
 
   const updateDragOffset = (offset: { x: number; y: number }) => {
     dragOffsetRef.current = offset
@@ -124,7 +160,7 @@ export function DailyActionCard(props: DailyActionCardProps) {
   }
 
   const commitFold = () => {
-    if (isFolded || props.disabled || isCommitting || isAwaitingRecord) {
+    if (isFolded || disabled || isCommitting || isAwaitingRecord) {
       resetDrag()
       return
     }
@@ -141,7 +177,7 @@ export function DailyActionCard(props: DailyActionCardProps) {
       setIsCommitting(false)
       setIsAwaitingRecord(true)
       updateDragOffset({ x: 0, y: 0 })
-      props.onFold()
+      onFold()
       foldTimer.current = null
     }, FOLD_COMMIT_DURATION)
   }
@@ -149,7 +185,7 @@ export function DailyActionCard(props: DailyActionCardProps) {
   const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
     if (
       isFolded ||
-      props.disabled ||
+      disabled ||
       isCommitting ||
       isAwaitingRecord ||
       event.button !== 0
@@ -167,15 +203,16 @@ export function DailyActionCard(props: DailyActionCardProps) {
       return
     }
 
-    const x = Math.min(
-      MAX_DRAG_DISTANCE,
-      Math.max(0, event.clientX - dragOrigin.current.x),
-    )
-    const y = Math.min(
-      MAX_DRAG_DISTANCE,
-      Math.max(0, event.clientY - dragOrigin.current.y),
-    )
-    updateDragOffset({ x, y })
+    updateDragOffset({
+      x: Math.min(
+        MAX_DRAG_DISTANCE,
+        Math.max(0, event.clientX - dragOrigin.current.x),
+      ),
+      y: Math.min(
+        MAX_DRAG_DISTANCE,
+        Math.max(0, event.clientY - dragOrigin.current.y),
+      ),
+    })
   }
 
   const handlePointerUp = (event: PointerEvent<HTMLElement>) => {
@@ -189,7 +226,6 @@ export function DailyActionCard(props: DailyActionCardProps) {
 
     const distance = Math.hypot(dragOffsetRef.current.x, dragOffsetRef.current.y)
     dragOrigin.current = null
-
     if (distance >= FOLD_THRESHOLD) {
       commitFold()
     } else {
@@ -197,14 +233,8 @@ export function DailyActionCard(props: DailyActionCardProps) {
     }
   }
 
-  const handlePointerCancel = () => {
-    if (!isCommitting) {
-      resetDrag()
-    }
-  }
-
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (isFolded || props.disabled || isCommitting || isAwaitingRecord) {
+    if (isFolded || disabled || isCommitting || isAwaitingRecord) {
       return
     }
 
@@ -221,66 +251,98 @@ export function DailyActionCard(props: DailyActionCardProps) {
       : `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) rotate(${progress * 5}deg) scale(${
           1 - progress * 0.025
         })`
-  const cardOpacity = isCommitting ? 0.28 : 1 - progress * 0.12
 
   return (
     <article
-      className={`daily-action-card daily-action-card--${props.category} ${
-        isFolded ? 'daily-action-card--folded' : 'daily-action-card--available'
-      } ${isDragging ? 'daily-action-card--dragging' : ''} ${
-        isCommitting ? 'daily-action-card--committing' : ''
-      }`}
+      className={[
+        'daily-action-card',
+        `daily-action-card--${action.category}`,
+        isFolded
+          ? 'daily-action-card--folded'
+          : 'daily-action-card--available',
+        isDragging ? 'daily-action-card--dragging' : '',
+        isCommitting ? 'daily-action-card--committing' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       role={isFolded ? undefined : 'group'}
-      tabIndex={isFolded || props.disabled || isAwaitingRecord ? undefined : 0}
-      aria-disabled={props.disabled || isAwaitingRecord || undefined}
+      tabIndex={isFolded || disabled || isAwaitingRecord ? undefined : 0}
+      aria-disabled={disabled || isAwaitingRecord || undefined}
       aria-live="polite"
       aria-label={
         isFolded
-          ? `${presentation.label}已完成`
-          : `向下或向右拖动，折下${presentation.label}卡`
+          ? `${action.name}已完成`
+          : `向下或向右拖动，折下${action.name}卡`
       }
-      style={{ transform: cardTransform, opacity: cardOpacity }}
+      style={{
+        transform: cardTransform,
+        opacity: isCommitting ? 0.28 : 1 - progress * 0.12,
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
+      onPointerCancel={() => {
+        if (!isCommitting) {
+          resetDrag()
+        }
+      }}
       onKeyDown={handleKeyDown}
     >
-      {isFolded && props.record ? (
+      {!isFolded ? (
+        <span className="daily-action-card__title-measures" aria-hidden="true">
+          <span
+            ref={singleLineMeasureRef}
+            className="daily-action-card__title-measure daily-action-card__title-measure--single"
+          >
+            {action.name}
+          </span>
+          <span
+            ref={wrappedTitleMeasureRef}
+            className="daily-action-card__title-measure daily-action-card__title-measure--wrapped"
+          >
+            {action.name}
+          </span>
+        </span>
+      ) : null}
+      {isFolded && record ? (
         <div className="daily-action-card__face daily-action-card__face--folded">
           <div className="daily-action-card__visual">
             <Pig
               className="daily-action-card__feedback-pig"
               level={1}
-              pose={
-                props.category === 'workout'
-                  ? 'workout-complete'
-                  : 'sleep-complete'
-              }
+              pose={CATEGORY_POSES[action.category]}
               decorative
             />
           </div>
           <div className="daily-action-card__details">
-            <h3>{presentation.label}</h3>
-            <time dateTime={props.record.recordedAt}>
-              {formatRecordedTime(props.record.recordedAt)}
+            <h3>{action.name}</h3>
+            <time dateTime={record.recordedAt}>
+              {formatRecordedTime(record.recordedAt)}
             </time>
+          </div>
+        </div>
+      ) : titleLayout.isInline ? (
+        <div className="daily-action-card__face daily-action-card__face--inline">
+          <div className="daily-action-card__inline-content">
+            <div className="daily-action-card__inline-title">
+              <img
+                className="daily-action-card__inline-logo"
+                src={smallLogo.src}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+              />
+              <h3>{action.name}</h3>
+            </div>
+            {titleLayout.showNote ? (
+              <p className="daily-action-card__target daily-action-card__inline-note">
+                {action.note}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : (
         <div className="daily-action-card__face">
-          {props.category === 'workout' ? (
-            <button
-              className="daily-action-card__cycle"
-              type="button"
-              aria-label={`换一种运动，当前是${presentation.label}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={props.onCycleType}
-            >
-              ↻
-            </button>
-          ) : null}
-
           <div className="daily-action-card__visual">
             <img
               className="daily-action-card__logo"
@@ -291,12 +353,8 @@ export function DailyActionCard(props: DailyActionCardProps) {
             />
           </div>
           <div className="daily-action-card__details">
-            <h3>{presentation.label}</h3>
-            <p className="daily-action-card__target">
-              {props.category === 'workout'
-                ? presentation.target
-                : `目标 ${props.targetTime}`}
-            </p>
+            <h3>{action.name}</h3>
+            <p className="daily-action-card__target">{action.note}</p>
           </div>
         </div>
       )}

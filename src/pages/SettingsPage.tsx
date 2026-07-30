@@ -1,37 +1,129 @@
-import { useState, type FormEvent } from 'react'
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
 import { useAppState } from '../app/providers/useAppState'
+import { resolveActionCategoryLogo } from '../assets/cards'
+import { SETTINGS_SECTION_LOGOS } from '../assets/settings'
 import { Pig } from '../components/Pig'
 import { SettingsCard, SettingsSheet } from '../components/Settings'
+import {
+  NEXT_MEET_BACKUP_MAX_BYTES,
+  createBackupFileName,
+  parseNextMeetBackup,
+  serializeNextMeetBackup,
+  type ParsedBackup,
+} from '../services/backup'
+import { resolveCurrentCycle } from '../services/currentCycle'
 import type {
-  ExerciseCategory,
-  ExerciseType,
+  Action,
+  ActionCategory,
 } from '../types/models'
 import './SettingsPage.css'
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
-const SLEEP_TIME_OPTIONS = ['23:00', '23:30', '00:00', '00:30']
+const TARGET_OPTIONS = Array.from({ length: 100 }, (_, index) => index + 1)
 
 type ActiveSheet =
   | null
   | 'pig'
   | 'cycle'
-  | 'exercises'
-  | 'exercise-form'
-  | 'sleep'
+  | 'actions'
+  | 'action-form'
+  | 'data-import'
 
-interface ExerciseDraft {
-  id?: string
+interface ActionPreset {
   name: string
   icon: string
-  category: ExerciseCategory
-  enabled: boolean
+  note: string
 }
 
-const categoryLabels: Record<ExerciseCategory, string> = {
-  strength: '力量',
-  cardio: '有氧',
-  flexibility: '柔韧',
-  other: '其他',
+interface ActionDraft {
+  id?: string
+  category: ActionCategory
+  categoryLabel: string
+  choice: string
+  name: string
+  note: string
+  targetCount: number
+  icon: string
+}
+
+const CATEGORY_LABELS: Record<ActionCategory, string> = {
+  health: '运动',
+  bodyCare: '身体照顾',
+  rest: '休息',
+  learning: '学习与兴趣',
+  work: '工作',
+  custom: '自定义',
+}
+
+const CATEGORY_DESCRIPTIONS: Record<ActionCategory, string> = {
+  health: '主动提升身体能力',
+  bodyCare: '温柔照顾自己的身体',
+  rest: '恢复自己',
+  learning: '成长和创造',
+  work: '完成重要事情',
+  custom: '任何特别想坚持的事情',
+}
+
+const ACTION_PRESETS: Record<Exclude<ActionCategory, 'custom'>, ActionPreset[]> = {
+  health: [
+    { name: '力量训练', icon: '💪', note: '60 分钟' },
+    { name: '跑步', icon: '🏃', note: '30 分钟' },
+    { name: '拳击', icon: '🥊', note: '30 分钟' },
+    { name: '健身操', icon: '🎵', note: '30 分钟' },
+    { name: '瑜伽', icon: '🧘', note: '30 分钟' },
+    { name: '骑行', icon: '🚲', note: '骑行 30 分钟' },
+    { name: '球类运动', icon: '🏀', note: '活动一下身体' },
+    { name: '爬山', icon: '🥾', note: '去户外走一走' },
+    { name: '散步', icon: '🚶', note: '散步 30 分钟' },
+  ],
+  bodyCare: [
+    { name: '喝水', icon: '💧', note: '记得补充水分' },
+    { name: '吃早餐', icon: '🍞', note: '认真吃一顿早餐' },
+    { name: '按时吃药', icon: '💊', note: '按计划照顾身体' },
+    { name: '控制饮食', icon: '🍽️', note: '好好选择今天的食物' },
+  ],
+  rest: [
+    { name: '早睡', icon: '🌙', note: '00:00 前休息' },
+    { name: '午休', icon: '💤', note: '休息 20 分钟' },
+    { name: '睡前放松', icon: '☁️', note: '睡前放松一会儿' },
+    { name: '冥想', icon: '🧘', note: '安静 10 分钟' },
+    { name: '泡澡', icon: '🛁', note: '让身体慢慢放松' },
+  ],
+  learning: [
+    { name: '阅读', icon: '📖', note: '阅读 20 分钟' },
+    { name: '学语言', icon: '💬', note: '学习 20 分钟' },
+    { name: '创作', icon: '✨', note: '创作一点喜欢的东西' },
+    { name: '画画', icon: '🎨', note: '画一点喜欢的东西' },
+    { name: '写作', icon: '✍️', note: '写一会儿' },
+    { name: '摄影', icon: '📷', note: '记录一个喜欢的瞬间' },
+    { name: '音乐', icon: '🎵', note: '练习 20 分钟' },
+    { name: '手工', icon: '🧶', note: '动手做一点东西' },
+    { name: '写日记', icon: '📔', note: '记下今天的心情' },
+  ],
+  work: [
+    { name: '工作就是工作', icon: '🚀', note: '完成今天重要的事情' },
+  ],
+}
+
+function settingsSectionIcon(
+  type: keyof typeof SETTINGS_SECTION_LOGOS,
+) {
+  return (
+    <img
+      className={[
+        'settings-section-icon',
+        `settings-section-icon--${type}`,
+      ].join(' ')}
+      src={SETTINGS_SECTION_LOGOS[type]}
+      alt=""
+      draggable={false}
+    />
+  )
 }
 
 function formatLocalDate(date: Date) {
@@ -59,26 +151,88 @@ function addDays(value: string, amount: number) {
   return formatLocalDate(date)
 }
 
-function createExerciseTypeId() {
+function formatBackupDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('zh-CN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(date)
+}
+
+function downloadBackupFile(file: File) {
+  const url = URL.createObjectURL(file)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = file.name
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function createActionId() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? `exercise-${crypto.randomUUID()}`
-    : `exercise-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    ? `action-${crypto.randomUUID()}`
+    : `action-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getFirstPreset(category: ActionCategory): ActionPreset {
+  if (category === 'custom') {
+    return { name: '努力', icon: '✦', note: '今天也向前一点' }
+  }
+  return ACTION_PRESETS[category][0]
+}
+
+function createActionDraft(category: ActionCategory = 'health'): ActionDraft {
+  const preset = getFirstPreset(category)
+  return {
+    category,
+    categoryLabel: category === 'custom' ? '好习惯' : '',
+    choice: category === 'custom' ? '__custom' : preset.name,
+    name: preset.name,
+    note: preset.note,
+    targetCount: 6,
+    icon: preset.icon,
+  }
+}
+
+function draftFromAction(action: Action): ActionDraft {
+  const presets =
+    action.category === 'custom' ? [] : ACTION_PRESETS[action.category]
+  const matchingPreset = presets.find((preset) => preset.name === action.name)
+
+  return {
+    id: action.id,
+    category: action.category,
+    categoryLabel: action.categoryLabel ?? '好习惯',
+    choice: matchingPreset?.name ?? '__custom',
+    name: action.name,
+    note: action.note,
+    targetCount: action.targetCount,
+    icon: action.icon ?? matchingPreset?.icon ?? '✦',
+  }
 }
 
 export default function SettingsPage() {
   const {
     state,
+    replaceAppState,
     updateSettings,
     updateCycle,
-    updateGoal,
-    createExerciseType,
-    updateExerciseType,
-    setExerciseGoalTarget,
+    createAction,
+    updateAction,
+    deleteAction,
     updatePig,
   } = useAppState()
-  const activeCycle =
-    state.cycles.find((cycle) => cycle.id === state.activeCycleId) ??
-    state.cycles[0]
+  const activeCycle = resolveCurrentCycle(
+    state.cycles,
+    state.activeCycleId,
+  )
+  const activeActions = state.actions.filter(
+    (action) => action.cycleId === activeCycle?.id && !action.deletedAt,
+  )
   const today = formatLocalDate(new Date())
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null)
   const [pigName, setPigName] = useState(state.pig.name)
@@ -89,21 +243,13 @@ export default function SettingsPage() {
   const [cycleTargetDate, setCycleTargetDate] = useState(
     activeCycle?.targetDate ?? addDays(today, 1),
   )
-  const [exerciseTargets, setExerciseTargets] = useState<
-    Record<string, number>
-  >({})
-  const [sleepTarget, setSleepTarget] = useState(0)
   const [cycleError, setCycleError] = useState('')
-  const [exerciseDraft, setExerciseDraft] =
-    useState<ExerciseDraft | null>(null)
-  const [exerciseError, setExerciseError] = useState('')
-  const [sleepTime, setSleepTime] = useState(
-    state.settings.sleepTargetTime,
-  )
+  const [actionDraft, setActionDraft] = useState<ActionDraft | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [pendingImport, setPendingImport] = useState<ParsedBackup | null>(null)
+  const [dataMessage, setDataMessage] = useState('')
+  const importInputRef = useRef<HTMLInputElement | null>(null)
 
-  const enabledExerciseTypes = state.exerciseTypes.filter(
-    (exerciseType) => exerciseType.enabled,
-  )
   const daysUntil = activeCycle
     ? Math.max(
         0,
@@ -118,36 +264,17 @@ export default function SettingsPage() {
   const closeSheet = () => {
     setActiveSheet(null)
     setCycleError('')
-    setExerciseError('')
-  }
-
-  const openPigSheet = () => {
-    setPigName(state.pig.name)
-    setActiveSheet('pig')
+    setActionError('')
+    setPendingImport(null)
   }
 
   const openCycleSheet = () => {
     if (!activeCycle) {
       return
     }
-
     setCycleTitle(activeCycle.title)
     setCycleStartDate(activeCycle.startDate)
     setCycleTargetDate(activeCycle.targetDate)
-    setExerciseTargets(
-      Object.fromEntries(
-        enabledExerciseTypes.map((exerciseType) => [
-          exerciseType.id,
-          activeCycle.goals.find(
-            (goal) => goal.exerciseTypeId === exerciseType.id,
-          )?.targetCount ?? 0,
-        ]),
-      ),
-    )
-    setSleepTarget(
-      activeCycle.goals.find((goal) => goal.type === 'sleep')?.targetCount ??
-        0,
-    )
     setCycleError('')
     setActiveSheet('cycle')
   }
@@ -157,143 +284,229 @@ export default function SettingsPage() {
     if (!activeCycle) {
       return
     }
-
     if (cycleStartDate > today) {
       setCycleError('开始日期不能晚于今天。')
       return
     }
-
     if (cycleTargetDate <= cycleStartDate) {
       setCycleError('目标日期需要晚于开始日期。')
       return
     }
 
-    const normalizedSleepTarget = Math.max(0, Math.round(sleepTarget))
     const nextLengthDays = Math.ceil(
       (parseLocalDate(cycleTargetDate).getTime() -
         parseLocalDate(cycleStartDate).getTime()) /
         DAY_IN_MS,
     )
-
     updateCycle(activeCycle.id, {
       title: cycleTitle.trim() || activeCycle.title,
       startDate: cycleStartDate,
       targetDate: cycleTargetDate,
       lengthDays: nextLengthDays,
     })
-
-    enabledExerciseTypes.forEach((exerciseType) => {
-      setExerciseGoalTarget(
-        activeCycle.id,
-        exerciseType.id,
-        exerciseTargets[exerciseType.id] ?? 0,
-      )
-    })
-
-    const sleepGoal = activeCycle.goals.find(
-      (goal) => goal.type === 'sleep',
-    )
-    if (sleepGoal) {
-      updateGoal(sleepGoal.id, { targetCount: normalizedSleepTarget })
-    }
-
     closeSheet()
   }
 
-  const openNewExercise = () => {
-    setExerciseDraft({
-      name: '',
-      icon: '',
-      category: 'other',
-      enabled: true,
-    })
-    setExerciseError('')
-    setActiveSheet('exercise-form')
+  const openActionEditor = (action?: Action) => {
+    setActionDraft(action ? draftFromAction(action) : createActionDraft())
+    setActionError('')
+    setActiveSheet('action-form')
   }
 
-  const openExerciseEditor = (exerciseType: ExerciseType) => {
-    setExerciseDraft({
-      id: exerciseType.id,
-      name: exerciseType.name,
-      icon: exerciseType.icon ?? '',
-      category: exerciseType.category,
-      enabled: exerciseType.enabled,
+  const handleCategoryChange = (category: ActionCategory) => {
+    if (!actionDraft) {
+      return
+    }
+    const preset = getFirstPreset(category)
+    setActionDraft({
+      ...actionDraft,
+      category,
+      categoryLabel: category === 'custom' ? '好习惯' : '',
+      choice: category === 'custom' ? '__custom' : preset.name,
+      name: preset.name,
+      note: preset.note,
+      icon: preset.icon,
     })
-    setExerciseError('')
-    setActiveSheet('exercise-form')
   }
 
-  const handleExerciseSave = (event: FormEvent<HTMLFormElement>) => {
+  const handleActionChoiceChange = (choice: string) => {
+    if (!actionDraft) {
+      return
+    }
+    if (choice === '__custom' || actionDraft.category === 'custom') {
+      setActionDraft({
+        ...actionDraft,
+        choice: '__custom',
+        name: actionDraft.choice === '__custom' ? actionDraft.name : '努力',
+        icon: '✦',
+      })
+      return
+    }
+    const preset = ACTION_PRESETS[actionDraft.category].find(
+      (candidate) => candidate.name === choice,
+    )
+    if (preset) {
+      setActionDraft({
+        ...actionDraft,
+        choice,
+        name: preset.name,
+        note: preset.note,
+        icon: preset.icon,
+      })
+    }
+  }
+
+  const handleActionSave = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!exerciseDraft) {
+    if (!actionDraft || !activeCycle) {
       return
     }
-
-    const name = exerciseDraft.name.trim()
+    const name = actionDraft.name.trim()
     if (!name) {
-      setExerciseError('写下这个运动的名字。')
+      setActionError('写下这件行动的名字。')
       return
     }
+    const now = new Date().toISOString()
+    const values = {
+      category: actionDraft.category,
+      categoryLabel:
+        actionDraft.category === 'custom'
+          ? actionDraft.categoryLabel.trim() || '好习惯'
+          : undefined,
+      name,
+      note: actionDraft.note.trim(),
+      targetCount: actionDraft.targetCount,
+      icon: actionDraft.icon,
+    }
 
-    if (exerciseDraft.id) {
-      updateExerciseType(exerciseDraft.id, {
-        name,
-        icon: exerciseDraft.icon.trim() || undefined,
-        category: exerciseDraft.category,
-      })
+    if (actionDraft.id) {
+      updateAction(actionDraft.id, values)
     } else {
-      createExerciseType({
-        id: createExerciseTypeId(),
-        name,
-        icon: exerciseDraft.icon.trim() || undefined,
-        category: exerciseDraft.category,
-        createdAt: new Date().toISOString(),
-        enabled: true,
+      createAction({
+        id: createActionId(),
+        cycleId: activeCycle.id,
+        ...values,
+        createdAt: now,
+        updatedAt: now,
       })
     }
-
-    setActiveSheet('exercises')
+    setActiveSheet('actions')
   }
 
-  const handleExerciseEnabledChange = () => {
-    if (!exerciseDraft?.id) {
+  const handleExportBackup = async () => {
+    const fileName = createBackupFileName()
+    const backupContents = serializeNextMeetBackup(state)
+    const file = new File([backupContents], fileName, {
+      type: 'application/json',
+    })
+
+    try {
+      const canShareFile =
+        typeof navigator.share === 'function' &&
+        (typeof navigator.canShare !== 'function' ||
+          navigator.canShare({ files: [file] }))
+
+      if (canShareFile) {
+        try {
+          await navigator.share({
+            title: 'next-meet 数据备份',
+            text: '保存这份备份，可以在另一台设备恢复 next-meet。',
+            files: [file],
+          })
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            return
+          }
+          downloadBackupFile(file)
+        }
+      } else {
+        downloadBackupFile(file)
+      }
+      setDataMessage('备份已经准备好啦')
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
+      setDataMessage('导出失败，请稍后再试')
+    }
+  }
+
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) {
       return
     }
 
-    updateExerciseType(exerciseDraft.id, {
-      enabled: !exerciseDraft.enabled,
-    })
-    setActiveSheet('exercises')
+    setDataMessage('')
+    if (file.size > NEXT_MEET_BACKUP_MAX_BYTES) {
+      setDataMessage('备份文件过大，无法读取')
+      return
+    }
+
+    try {
+      const parsedBackup = parseNextMeetBackup(await file.text())
+      setPendingImport(parsedBackup)
+      setActiveSheet('data-import')
+    } catch (error) {
+      setDataMessage(
+        error instanceof Error ? error.message : '无法读取这个备份文件。',
+      )
+    }
   }
+
+  const confirmImport = () => {
+    if (!pendingImport) {
+      return
+    }
+    replaceAppState(pendingImport.state)
+    setPendingImport(null)
+    setActiveSheet(null)
+    setDataMessage('已经恢复到备份里的样子')
+  }
+
+  const cycleWeeks = activeCycle
+    ? Math.max(1, activeCycle.lengthDays / 7)
+    : 1
+  const weeklyFrequency = actionDraft
+    ? Math.round((actionDraft.targetCount / cycleWeeks) * 10) / 10
+    : 0
 
   return (
-    <section className="settings-page" aria-labelledby="settings-page-title">
-      <header className="settings-page__heading">
-        <p>调整这一场里，照顾自己的方式</p>
-        <h1 id="settings-page-title">设置</h1>
-      </header>
-
-      <SettingsCard icon="🐷" title="小猪">
-        <button className="settings-row" type="button" onClick={openPigSheet}>
-          <span>
-            <small>名字</small>
-            <strong>{state.pig.name}</strong>
-          </span>
+    <section className="settings-page" aria-label="设置">
+      <SettingsCard
+        icon={settingsSectionIcon('pig')}
+        title="小猪"
+        className="settings-card--pig"
+      >
+        <button
+          className="settings-row"
+          type="button"
+          onClick={() => {
+            setPigName(state.pig.name)
+            setActiveSheet('pig')
+          }}
+        >
+          <span><small>名字</small><strong>{state.pig.name}</strong></span>
           <span aria-hidden="true">›</span>
         </button>
-        <button className="settings-row" type="button" onClick={openPigSheet}>
-          <span>
-            <small>当前形象</small>
-            <strong>Lv.{state.pig.level}</strong>
-          </span>
+        <div className="settings-row settings-row--static">
+          <span><small>当前形象</small><strong>Lv.{state.pig.level}</strong></span>
           <Pig level={state.pig.level} size="small" decorative />
-          <span aria-hidden="true">›</span>
-        </button>
+        </div>
       </SettingsCard>
 
-      <SettingsCard icon="🎫" title="当前周期" className="settings-card--primary">
+      <SettingsCard
+        icon={settingsSectionIcon('cycle')}
+        title="当前周期"
+        className="settings-card--primary"
+      >
         {activeCycle ? (
-          <button className="settings-cycle-summary" type="button" onClick={openCycleSheet}>
+          <button
+            className="settings-cycle-summary"
+            type="button"
+            onClick={openCycleSheet}
+          >
             <span>
               <strong>{activeCycle.title}</strong>
               <small>
@@ -309,49 +522,75 @@ export default function SettingsPage() {
         )}
       </SettingsCard>
 
-      <SettingsCard icon="🏃" title="我的运动">
+      <SettingsCard icon={settingsSectionIcon('actions')} title="我的行动">
         <button
           className="settings-exercise-summary"
           type="button"
-          onClick={() => setActiveSheet('exercises')}
+          onClick={() => setActiveSheet('actions')}
         >
           <span className="settings-exercise-chips">
-            {enabledExerciseTypes.slice(0, 4).map((exerciseType) => (
-              <span key={exerciseType.id}>
-                <i aria-hidden="true">{exerciseType.icon || '○'}</i>
-                {exerciseType.name}
-              </span>
-            ))}
+            {activeActions.slice(0, 5).map((action) => {
+              const logo = resolveActionCategoryLogo(action.category, 'small')
+              return (
+                <span key={action.id}>
+                  <img src={logo.src} alt="" aria-hidden="true" />
+                  {action.name}
+                </span>
+              )
+            })}
+            {activeActions.length === 0 ? <span>添加第一件行动</span> : null}
           </span>
           <span aria-hidden="true">›</span>
         </button>
       </SettingsCard>
 
-      <SettingsCard icon="🌙" title="睡眠目标">
-        <button
-          className="settings-row"
-          type="button"
-          onClick={() => {
-            setSleepTime(state.settings.sleepTargetTime)
-            setActiveSheet('sleep')
-          }}
-        >
+      <SettingsCard icon={settingsSectionIcon('todo')} title="待办">
+        <label className="settings-inline-toggle">
           <span>
-            <small>目标时间</small>
-            <strong>{state.settings.sleepTargetTime}</strong>
+            <strong>延续未完成事项</strong>
+            <small>进入新周期时，自动带上上一场未完成的待办。</small>
           </span>
-          <span aria-hidden="true">›</span>
-        </button>
+          <input
+            type="checkbox"
+            checked={state.settings.carryOverUnfinishedTodos}
+            onChange={(event) =>
+              updateSettings({
+                carryOverUnfinishedTodos: event.target.checked,
+              })
+            }
+          />
+        </label>
       </SettingsCard>
 
-      <SettingsCard icon="✦" title="关于 next-meet" className="settings-about">
-        <strong>next-meet</strong>
-        <p>
-          为下一场见面，
-          <br />
-          温柔照顾自己。
-        </p>
-        <small>Version 1.0</small>
+      <SettingsCard
+        icon={settingsSectionIcon('data')}
+        title="我的数据"
+        className="settings-data"
+      >
+        <p>把周期、行动、记录和小猪一起带到另一台设备。</p>
+        <div className="settings-data__actions">
+          <button type="button" onClick={handleExportBackup}>
+            导出备份
+          </button>
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+          >
+            导入备份
+          </button>
+          <input
+            ref={importInputRef}
+            className="settings-data__file-input"
+            type="file"
+            accept=".json,.nextmeet.json,application/json"
+            onChange={handleImportFile}
+          />
+        </div>
+        {dataMessage ? (
+          <small className="settings-data__message" role="status">
+            {dataMessage}
+          </small>
+        ) : null}
       </SettingsCard>
 
       {activeSheet === 'pig' ? (
@@ -365,13 +604,8 @@ export default function SettingsPage() {
             onSubmit={(event) => {
               event.preventDefault()
               const name = pigName.trim()
-              if (!name) {
-                return
-              }
-              updatePig({
-                name,
-                lastUpdatedAt: new Date().toISOString(),
-              })
+              if (!name) return
+              updatePig({ name, lastUpdatedAt: new Date().toISOString() })
               closeSheet()
             }}
           >
@@ -426,50 +660,8 @@ export default function SettingsPage() {
                 />
               </label>
             </div>
-            <fieldset>
-              <legend>这一场想完成</legend>
-              {enabledExerciseTypes.map((exerciseType) => (
-                <label
-                  className="settings-target-row"
-                  key={exerciseType.id}
-                >
-                  <span>
-                    {exerciseType.icon ? `${exerciseType.icon} ` : ''}
-                    {exerciseType.name}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    inputMode="numeric"
-                    value={exerciseTargets[exerciseType.id] ?? 0}
-                    onChange={(event) =>
-                      setExerciseTargets((current) => ({
-                        ...current,
-                        [exerciseType.id]: Number(event.target.value),
-                      }))
-                    }
-                  />
-                  <small>次</small>
-                </label>
-              ))}
-              <label className="settings-target-row">
-                <span>早睡</span>
-                <input
-                  type="number"
-                  min="0"
-                  inputMode="numeric"
-                  value={sleepTarget}
-                  onChange={(event) =>
-                    setSleepTarget(Number(event.target.value))
-                  }
-                />
-                <small>次</small>
-              </label>
-            </fieldset>
             {cycleError ? (
-              <p className="settings-form__error" role="alert">
-                {cycleError}
-              </p>
+              <p className="settings-form__error" role="alert">{cycleError}</p>
             ) : null}
             <button className="settings-primary-button" type="submit">
               保存这一场
@@ -478,144 +670,217 @@ export default function SettingsPage() {
         </SettingsSheet>
       ) : null}
 
-      {activeSheet === 'exercises' ? (
-        <SettingsSheet title="我的运动" onClose={closeSheet}>
+      {activeSheet === 'actions' ? (
+        <SettingsSheet title="我的行动" onClose={closeSheet}>
           <div className="settings-exercise-list">
-            {state.exerciseTypes.map((exerciseType) => (
-              <button
-                type="button"
-                key={exerciseType.id}
-                onClick={() => openExerciseEditor(exerciseType)}
-              >
-                <i aria-hidden="true">{exerciseType.icon || '○'}</i>
-                <span>
-                  <strong>{exerciseType.name}</strong>
-                  <small>
-                    {categoryLabels[exerciseType.category]}
-                    {!exerciseType.enabled ? ' · 已停用' : ''}
-                  </small>
-                </span>
-                <span aria-hidden="true">›</span>
-              </button>
-            ))}
+            {activeActions.map((action) => {
+              const logo = resolveActionCategoryLogo(action.category, 'small')
+              return (
+                <button
+                  type="button"
+                  key={action.id}
+                  onClick={() => openActionEditor(action)}
+                >
+                  <img
+                    className="settings-action-logo"
+                    src={logo.src}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <strong>{action.name}</strong>
+                    <small>
+                      {action.category === 'custom'
+                        ? action.categoryLabel || '好习惯'
+                        : CATEGORY_LABELS[action.category]}
+                      {' · '}{action.targetCount} 次
+                    </small>
+                  </span>
+                  <span aria-hidden="true">›</span>
+                </button>
+              )
+            })}
           </div>
           <button
             className="settings-add-button"
             type="button"
-            onClick={openNewExercise}
+            onClick={() => openActionEditor()}
           >
-            ＋ 添加运动
+            ＋ 添加行动
           </button>
         </SettingsSheet>
       ) : null}
 
-      {activeSheet === 'exercise-form' && exerciseDraft ? (
+      {activeSheet === 'action-form' && actionDraft ? (
         <SettingsSheet
-          title={exerciseDraft.id ? '编辑运动' : '添加运动'}
-          onClose={() => setActiveSheet('exercises')}
+          title={actionDraft.id ? '编辑行动' : '添加行动'}
+          onClose={() => setActiveSheet('actions')}
         >
-          <form className="settings-form" onSubmit={handleExerciseSave}>
+          <form className="settings-form" onSubmit={handleActionSave}>
             <label>
-              <span>运动名称</span>
-              <input
-                value={exerciseDraft.name}
-                autoFocus
-                placeholder="例如：瑜伽"
-                onChange={(event) =>
-                  setExerciseDraft({
-                    ...exerciseDraft,
-                    name: event.target.value,
-                  })
-                }
-              />
-            </label>
-            <label>
-              <span>图标</span>
-              <input
-                value={exerciseDraft.icon}
-                placeholder="例如：🏃"
-                onChange={(event) =>
-                  setExerciseDraft({
-                    ...exerciseDraft,
-                    icon: event.target.value,
-                  })
-                }
-              />
-            </label>
-            <label>
-              <span>辅助分类</span>
+              <span>类型</span>
               <select
-                value={exerciseDraft.category}
+                value={actionDraft.category}
                 onChange={(event) =>
-                  setExerciseDraft({
-                    ...exerciseDraft,
-                    category: event.target.value as ExerciseCategory,
-                  })
+                  handleCategoryChange(event.target.value as ActionCategory)
                 }
               >
-                {Object.entries(categoryLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
+                {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <small>分类只用于推荐，记录中会显示运动名称。</small>
+              <small>{CATEGORY_DESCRIPTIONS[actionDraft.category]}</small>
             </label>
-            {exerciseError ? (
-              <p className="settings-form__error" role="alert">
-                {exerciseError}
-              </p>
+
+            {actionDraft.category === 'custom' ? (
+              <label>
+                <span>类型名称</span>
+                <input
+                  value={actionDraft.categoryLabel}
+                  onChange={(event) =>
+                    setActionDraft({
+                      ...actionDraft,
+                      categoryLabel: event.target.value,
+                    })
+                  }
+                />
+              </label>
+            ) : null}
+
+            <label>
+              <span>行动</span>
+              <select
+                value={actionDraft.choice}
+                onChange={(event) =>
+                  handleActionChoiceChange(event.target.value)
+                }
+              >
+                {actionDraft.category !== 'custom'
+                  ? ACTION_PRESETS[actionDraft.category].map((preset) => (
+                      <option key={preset.name} value={preset.name}>
+                        {preset.name}
+                      </option>
+                    ))
+                  : null}
+                <option value="__custom">自定义</option>
+              </select>
+            </label>
+
+            {actionDraft.choice === '__custom' ? (
+              <label>
+                <span>行动名称</span>
+                <input
+                  value={actionDraft.name}
+                  autoFocus
+                  onChange={(event) =>
+                    setActionDraft({ ...actionDraft, name: event.target.value })
+                  }
+                />
+              </label>
+            ) : null}
+
+            <label>
+              <span>小提示</span>
+              <input
+                value={actionDraft.note}
+                placeholder="例如：20分钟"
+                onChange={(event) =>
+                  setActionDraft({ ...actionDraft, note: event.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              <span>周期目标</span>
+              <select
+                value={actionDraft.targetCount}
+                onChange={(event) =>
+                  setActionDraft({
+                    ...actionDraft,
+                    targetCount: Number(event.target.value),
+                  })
+                }
+              >
+                {TARGET_OPTIONS.map((target) => (
+                  <option key={target} value={target}>{target} 次</option>
+                ))}
+              </select>
+              <small>每周约 {weeklyFrequency} 次</small>
+            </label>
+
+            {actionError ? (
+              <p className="settings-form__error" role="alert">{actionError}</p>
             ) : null}
             <button className="settings-primary-button" type="submit">
-              保存运动
+              保存行动
             </button>
-            {exerciseDraft.id ? (
+            {actionDraft.id ? (
               <button
-                className="settings-secondary-button"
+                className="settings-danger-button"
                 type="button"
-                onClick={handleExerciseEnabledChange}
+                onClick={() => {
+                  deleteAction(actionDraft.id!)
+                  setActiveSheet('actions')
+                }}
               >
-                {exerciseDraft.enabled ? '停用这个运动' : '重新启用'}
+                删除行动
               </button>
             ) : null}
           </form>
         </SettingsSheet>
       ) : null}
 
-      {activeSheet === 'sleep' ? (
-        <SettingsSheet title="睡眠目标" onClose={closeSheet}>
-          <form
-            className="settings-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              updateSettings({ sleepTargetTime: sleepTime })
-              closeSheet()
-            }}
-          >
-            <label>
-              <span>希望几点休息</span>
-              <input
-                type="time"
-                value={sleepTime}
-                onChange={(event) => setSleepTime(event.target.value)}
-              />
-            </label>
-            <div className="settings-time-options">
-              {SLEEP_TIME_OPTIONS.map((time) => (
-                <button
-                  className={sleepTime === time ? 'is-selected' : ''}
-                  key={time}
-                  type="button"
-                  onClick={() => setSleepTime(time)}
-                >
-                  {time}
-                </button>
-              ))}
-            </div>
-            <button className="settings-primary-button" type="submit">
-              保存睡眠目标
+      {activeSheet === 'data-import' && pendingImport ? (
+        <SettingsSheet title="恢复这份备份" onClose={closeSheet}>
+          <div className="settings-import">
+            <p>这份备份包含：</p>
+            <dl>
+              <div>
+                <dt>备份时间</dt>
+                <dd>{formatBackupDate(pendingImport.summary.exportedAt)}</dd>
+              </div>
+              <div>
+                <dt>小猪</dt>
+                <dd>
+                  {pendingImport.summary.pigName}
+                  {' · '}Lv.{pendingImport.summary.pigLevel}
+                </dd>
+              </div>
+              <div>
+                <dt>周期</dt>
+                <dd>{pendingImport.summary.cycleCount} 个</dd>
+              </div>
+              <div>
+                <dt>行动</dt>
+                <dd>{pendingImport.summary.actionCount} 项</dd>
+              </div>
+              <div>
+                <dt>成长记录</dt>
+                <dd>{pendingImport.summary.activityCount} 条</dd>
+              </div>
+              <div>
+                <dt>待办</dt>
+                <dd>{pendingImport.summary.todoCount} 项</dd>
+              </div>
+            </dl>
+            <p className="settings-import__warning">
+              导入会替换这台设备当前的全部 next-meet 数据。原有数据不会与备份合并。
+            </p>
+            <button
+              className="settings-primary-button"
+              type="button"
+              onClick={confirmImport}
+            >
+              导入并恢复
             </button>
-          </form>
+            <button
+              className="settings-secondary-button"
+              type="button"
+              onClick={closeSheet}
+            >
+              先不导入
+            </button>
+          </div>
         </SettingsSheet>
       ) : null}
     </section>

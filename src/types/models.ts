@@ -1,9 +1,16 @@
 import type { PigLevel } from './pig'
 
 export type GoalType = 'strength' | 'cardio' | 'sleep' | 'todo'
-export type ActivityType = 'workout' | 'sleep'
+export type ActivityType = 'action'
 export type ActivitySource = 'daily' | 'makeup' | 'migration'
 export type ExerciseCategory = 'strength' | 'cardio' | 'flexibility' | 'other'
+export type ActionCategory =
+  | 'health'
+  | 'bodyCare'
+  | 'rest'
+  | 'learning'
+  | 'work'
+  | 'custom'
 
 export type CycleStatus = 'active' | 'completed' | 'archived'
 
@@ -26,10 +33,24 @@ export interface ExerciseType {
   enabled: boolean
 }
 
+export interface Action {
+  id: string
+  cycleId: string
+  category: ActionCategory
+  categoryLabel?: string
+  name: string
+  note: string
+  targetCount: number
+  icon?: string
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+}
+
 export interface ActivityRecord {
   id: string
   cycleId: string
-  goalId: string
+  actionId: string
   type: ActivityType
   date: string
   recordedAt: string
@@ -41,11 +62,24 @@ export interface ActivityRecord {
     durationMinutes?: number
     sleepTime?: string
     note?: string
+    actionName?: string
+    actionCategory?: ActionCategory
+    actionNote?: string
   }
 }
 
+export interface CycleTodo {
+  id: string
+  cycleId: string
+  text: string
+  completed: boolean
+  createdAt: string
+  completedAt?: string
+  carriedFromTodoId?: string
+}
+
 export interface RecordDailyActivityInput {
-  goalId: string
+  actionId: string
   note?: string
   metadata?: ActivityRecord['metadata']
 }
@@ -89,14 +123,17 @@ export interface UserSettings {
   defaultCycleLengthDays: number
   sleepTargetTime: string
   firstLaunchCompleted: boolean
+  carryOverUnfinishedTodos: boolean
 }
 
 export interface AppState {
-  schemaVersion: 4
+  schemaVersion: 6
   cycles: Cycle[]
   activeCycleId: string | null
   goals: Goal[]
+  actions: Action[]
   activities: ActivityRecord[]
+  todos: CycleTodo[]
   exerciseTypes: ExerciseType[]
   achievements: Achievement[]
   pig: Pig

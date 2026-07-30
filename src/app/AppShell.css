@@ -1,11 +1,10 @@
 .app-shell {
   width: min(100%, 860px);
   min-height: 100svh;
-  box-sizing: border-box;
   margin: 0 auto;
-  padding: 18px 20px 104px;
-  color: #493934;
-  font-family: Nunito, 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif;
+  padding: var(--page-section-gap) var(--page-gutter) 5.5rem;
+  color: var(--color-text);
+  font-family: var(--font-sans);
 }
 
 .app-shell__main {
@@ -15,18 +14,22 @@
 .app-shell__nav {
   position: fixed;
   z-index: 10;
-  right: 50%;
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: 0;
+  left: 50%;
   display: grid;
-  width: min(calc(100% - 32px), 520px);
+  width: min(100%, 860px);
   grid-template-columns: repeat(3, 1fr);
-  padding: 7px;
-  border: 1px solid #eadbd2;
-  border-radius: 22px;
-  background: rgb(255 252 248 / 94%);
-  box-shadow: 0 10px 32px rgb(73 57 52 / 12%);
-  transform: translateX(50%);
-  backdrop-filter: blur(16px);
+  padding:
+    0.375rem max(var(--space-3), env(safe-area-inset-right))
+    calc(0.375rem + env(safe-area-inset-bottom))
+    max(var(--space-3), env(safe-area-inset-left));
+  border: var(--paper-border);
+  border-bottom: 0;
+  border-radius: 1.125rem 1.125rem 0 0;
+  background: rgb(255 252 248 / 98%);
+  box-shadow: 0 -2px 10px rgb(73 57 52 / 2.5%);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
 }
 
 .app-shell__nav-link {
@@ -35,32 +38,36 @@
   place-items: center;
   align-content: center;
   gap: 1px;
-  border-radius: 16px;
-  color: #8d7770;
-  font-size: 11px;
+  border-radius: 0.875rem;
+  color: var(--color-text-muted);
+  font-size: var(--type-tiny);
   font-weight: 700;
   text-decoration: none;
 }
 
-.app-shell__nav-link span {
-  font-size: 18px;
-  line-height: 1;
+.app-shell__nav-icon,
+.app-shell__nav-icon svg {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.app-shell__nav-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
 }
 
 .app-shell__nav-link--active {
-  color: #a64d58;
-  background: #f9e8e8;
+  color: var(--color-brand-strong);
+  background: var(--color-brand-soft);
 }
 
 .app-shell__nav-link:focus-visible {
-  outline: 3px solid #5d52ba;
+  outline: 3px solid var(--color-focus);
   outline-offset: 2px;
-}
-
-@media (max-width: 520px) {
-  .app-shell {
-    padding: 12px 14px 98px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

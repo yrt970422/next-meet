@@ -1,48 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAppState } from '../app/providers/useAppState'
+import type { PigPose } from '../assets/pig'
 import { DailyActionCard } from '../components/DailyActionCard'
 import { Pig } from '../components/Pig'
-import { recommendExerciseType } from '../services/workoutRecommendation'
+import { resolveCurrentCycle } from '../services/currentCycle'
+import type { ActionCategory, ActivityRecord } from '../types/models'
 import './HomePage.css'
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const PIG_FEEDBACK_DURATION = 3000
-const HOME_TODOS_STORAGE_KEY = 'next-meet:home-todos:v1'
-
-interface HomeTodo {
-  id: string
-  text: string
-  completed: boolean
-}
+const actionDisplayHistory = new Map<string, number>()
+let actionDisplaySequence = 0
 
 type HeroPigFeedback =
   | null
   | {
-      pose: 'workout-complete' | 'sleep-complete'
-      startedAt: number
+      pose: PigPose
     }
 
-function loadHomeTodos(date: string): HomeTodo[] {
-  try {
-    const stored = window.localStorage.getItem(
-      `${HOME_TODOS_STORAGE_KEY}:${date}`,
-    )
-    if (!stored) {
-      return []
-    }
-
-    const parsed = JSON.parse(stored)
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (item): item is HomeTodo =>
-            typeof item?.id === 'string' &&
-            typeof item?.text === 'string' &&
-            typeof item?.completed === 'boolean',
-        )
-      : []
-  } catch {
-    return []
-  }
+const FEEDBACK_POSES: Record<ActionCategory, PigPose> = {
+  health: 'workout-complete',
+  bodyCare: 'body-care-complete',
+  rest: 'sleep-complete',
+  learning: 'learning-complete',
+  work: 'work-complete',
+  custom: 'encourage-complete',
 }
 
 function parseLocalDate(dateString: string) {
@@ -96,52 +79,126 @@ function formatTargetDate(dateString?: string) {
 }
 
 export default function HomePage() {
-  const { state, recordDailyActivity } = useAppState()
+  const {
+    state,
+    addCycleTodo,
+    toggleCycleTodo,
+    deleteCycleTodo,
+    recordDailyActivity,
+  } = useAppState()
+  const navigate = useNavigate()
   const today = formatLocalDate(new Date())
-  const [exerciseSelectionId, setExerciseSelectionId] = useState<string | null>(
-    null,
-  )
   const [pigFeedback, setPigFeedback] = useState<HeroPigFeedback>(null)
-  const [todos, setTodos] = useState<HomeTodo[]>(() => loadHomeTodos(today))
+  const [actionPageStart, setActionPageStart] = useState(0)
   const [todoDraft, setTodoDraft] = useState('')
   const pigFeedbackTimer = useRef<number | null>(null)
-  const activeCycle =
-    state.cycles.find((cycle) => cycle.id === state.activeCycleId) ?? state.cycles[0]
-  const daysUntil = getDaysUntil(activeCycle?.targetDate)
-  const pigLevel = state.pig?.level ?? 1
-  const cycleActivities = activeCycle
-    ? state.activities.filter((activity) => activity.cycleId === activeCycle.id)
-    : []
-  const todayActivities = cycleActivities.filter((activity) => activity.date === today)
-  const workoutRecord =
-    todayActivities.find((activity) => activity.type === 'workout') ?? null
-  const sleepRecord = todayActivities.find((activity) => activity.type === 'sleep') ?? null
-  const strengthGoal = activeCycle?.goals.find((goal) => goal.type === 'strength')
-  const cardioGoal = activeCycle?.goals.find((goal) => goal.type === 'cardio')
-  const sleepGoal = activeCycle?.goals.find((goal) => goal.type === 'sleep')
-
-  const enabledExerciseTypes = state.exerciseTypes.filter(
-    (exerciseType) => exerciseType.enabled,
+  const activeCycle = resolveCurrentCycle(
+    state.cycles,
+    state.activeCycleId,
+    today,
   )
-  const recommendedExerciseType = recommendExerciseType({
-    cycle: activeCycle,
-    exerciseTypes: state.exerciseTypes,
-    activities: state.activities,
-    currentDate: today,
-  })
-  const selectedExercise =
-    enabledExerciseTypes.find(
-      (exerciseType) => exerciseType.id === exerciseSelectionId,
-    ) ??
-    recommendedExerciseType ??
-    enabledExerciseTypes[0]
-  const selectedWorkoutGoal =
-    activeCycle?.goals.find(
-      (goal) => goal.exerciseTypeId === selectedExercise?.id,
-    ) ??
-    (selectedExercise?.category === 'strength'
-      ? strengthGoal
-      : (cardioGoal ?? strengthGoal))
+  const activeCycleId = activeCycle?.id
+  const daysUntil = getDaysUntil(activeCycle?.targetDate)
+  const cycleTodos = state.todos.filter(
+    (todo) => todo.cycleId === activeCycle?.id,
+  )
+  const incompleteTodos = cycleTodos
+    .filter((todo) => !todo.completed)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  const completedTodos = cycleTodos
+    .filter((todo) => todo.completed)
+    .sort((left, right) =>
+      (right.completedAt ?? '').localeCompare(left.completedAt ?? ''),
+    )
+  const todos = [...incompleteTodos, ...completedTodos]
+  const pigLevel = state.pig?.level ?? 1
+  const { availableActions, todayActivityByAction } = (() => {
+    const cycleActivities = activeCycleId
+      ? state.activities.filter(
+          (activity) => activity.cycleId === activeCycleId,
+        )
+      : []
+    const completedCounts = new Map<string, number>()
+    const todayRecords = new Map<string, ActivityRecord>()
+
+    cycleActivities.forEach((activity) => {
+      completedCounts.set(
+        activity.actionId,
+        (completedCounts.get(activity.actionId) ?? 0) + 1,
+      )
+
+      if (activity.date !== today) {
+        return
+      }
+
+      const existing = todayRecords.get(activity.actionId)
+      if (!existing || activity.recordedAt > existing.recordedAt) {
+        todayRecords.set(activity.actionId, activity)
+      }
+    })
+
+    const activeActions = state.actions.filter(
+      (action) =>
+        action.cycleId === activeCycleId &&
+        !action.deletedAt,
+    )
+    const incompleteActions = activeActions
+      .filter(
+        (action) =>
+          !todayRecords.has(action.id) &&
+          (completedCounts.get(action.id) ?? 0) < action.targetCount,
+      )
+      .sort((left, right) => {
+        const leftRemaining =
+          left.targetCount - (completedCounts.get(left.id) ?? 0)
+        const rightRemaining =
+          right.targetCount - (completedCounts.get(right.id) ?? 0)
+        const leftLastDisplayed =
+          actionDisplayHistory.get(left.id) ??
+          Number.NEGATIVE_INFINITY
+        const rightLastDisplayed =
+          actionDisplayHistory.get(right.id) ??
+          Number.NEGATIVE_INFINITY
+
+        return (
+          rightRemaining - leftRemaining ||
+          leftLastDisplayed - rightLastDisplayed ||
+          left.createdAt.localeCompare(right.createdAt)
+        )
+      })
+    const completedTodayActions = activeActions
+      .filter((action) => todayRecords.has(action.id))
+      .sort((left, right) => {
+        const leftRecord = todayRecords.get(left.id)
+        const rightRecord = todayRecords.get(right.id)
+
+        return (
+          (rightRecord?.recordedAt ?? '').localeCompare(
+            leftRecord?.recordedAt ?? '',
+          ) ||
+          left.createdAt.localeCompare(right.createdAt)
+        )
+      })
+
+    return {
+      availableActions: [...incompleteActions, ...completedTodayActions],
+      todayActivityByAction: todayRecords,
+    }
+  })()
+  const normalizedActionStart =
+    availableActions.length > 0
+      ? actionPageStart % availableActions.length
+      : 0
+  const visibleActions =
+    availableActions.length <= 2
+      ? availableActions
+      : [
+          availableActions[normalizedActionStart],
+          availableActions[
+            (normalizedActionStart + 1) % availableActions.length
+          ],
+        ]
+  const visibleActionIds = visibleActions.map((action) => action.id).join('|')
   const canRecordToday =
     Boolean(activeCycle) &&
     today >= (activeCycle?.startDate ?? '') &&
@@ -182,20 +239,24 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(
-      `${HOME_TODOS_STORAGE_KEY}:${today}`,
-      JSON.stringify(todos),
-    )
-  }, [today, todos])
+    if (!visibleActionIds) {
+      return
+    }
+
+    visibleActionIds.split('|').forEach((actionId) => {
+      actionDisplaySequence += 1
+      actionDisplayHistory.set(actionId, actionDisplaySequence)
+    })
+  }, [visibleActionIds])
 
   const showPigFeedback = (
-    pose: Exclude<HeroPigFeedback, null>['pose'],
+    pose: PigPose,
   ) => {
     if (pigFeedbackTimer.current !== null) {
       window.clearTimeout(pigFeedbackTimer.current)
     }
 
-    setPigFeedback({ pose, startedAt: Date.now() })
+    setPigFeedback({ pose })
     pigFeedbackTimer.current = window.setTimeout(() => {
       setPigFeedback(null)
       pigFeedbackTimer.current = null
@@ -223,21 +284,28 @@ export default function HomePage() {
         </div>
 
         <div className="home-hero__companion">
-          <Pig
-            key={
-              pigFeedback
-                ? `${pigFeedback.pose}-${pigFeedback.startedAt}`
-                : 'idle'
-            }
-            className={`home-hero__pig ${
-              pigFeedback ? 'home-hero__pig--reacting' : ''
-            }`}
-            level={pigLevel}
-            pose={pigFeedback?.pose ?? 'idle'}
-            size="hero"
-            name={state.pig?.name ?? '小猪'}
-            loading="eager"
-          />
+          <div className="home-hero__pig-anchor">
+            <Pig
+              key={
+                pigFeedback
+                  ? pigFeedback.pose
+                  : 'idle'
+              }
+              className={`home-hero__pig ${
+                pigFeedback ? 'home-hero__pig--reacting' : ''
+              }`}
+              level={pigLevel}
+              pose={pigFeedback?.pose ?? 'idle'}
+              size="hero"
+              name={state.pig?.name ?? '小猪'}
+              loading="eager"
+            />
+            <div className="home-hero__pig-meta" aria-label={`${state.pig.name}，等级 ${pigLevel}`}>
+              <strong>{state.pig.name}</strong>
+              <i aria-hidden="true">·</i>
+              <span>Lv.{pigLevel}</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -247,55 +315,64 @@ export default function HomePage() {
           <time dateTime={today}>{formatTargetDate(today)}</time>
         </div>
 
-        <div className="home-daily-actions__grid">
-          {selectedExercise ? (
-            <DailyActionCard
-              category="workout"
-              record={workoutRecord}
-              selectedExercise={selectedExercise}
-              exerciseTypes={state.exerciseTypes}
-              onCycleType={() => {
-                const currentIndex = enabledExerciseTypes.findIndex(
-                  (exerciseType) => exerciseType.id === selectedExercise.id,
-                )
-                const nextExercise =
-                  enabledExerciseTypes[
-                    (currentIndex + 1) % enabledExerciseTypes.length
-                  ]
-                setExerciseSelectionId(nextExercise?.id ?? null)
-              }}
-              onFold={() => {
-                if (selectedWorkoutGoal) {
-                  recordDailyActivity({
-                    goalId: selectedWorkoutGoal.id,
-                    metadata: {
-                      exerciseTypeId: selectedExercise.id,
-                      durationMinutes:
-                        selectedExercise.category === 'strength' ? 60 : 30,
-                    },
-                  })
-                }
-              }}
-              onFoldSuccess={() => {
-                showPigFeedback('workout-complete')
-              }}
-              disabled={!selectedWorkoutGoal || !canRecordToday}
-            />
-          ) : null}
-          <DailyActionCard
-            category="sleep"
-            record={sleepRecord}
-            targetTime={state.settings.sleepTargetTime}
-            onFold={() => {
-              if (sleepGoal) {
-                recordDailyActivity({ goalId: sleepGoal.id })
-              }
-            }}
-            onFoldSuccess={() => {
-              showPigFeedback('sleep-complete')
-            }}
-            disabled={!sleepGoal || !canRecordToday}
-          />
+        <div className="home-daily-actions__browser">
+          <button
+            className="home-daily-actions__arrow"
+            type="button"
+            aria-label="查看前面的行动"
+            disabled={availableActions.length <= 2}
+            onClick={() =>
+              setActionPageStart((current) =>
+                current <= 0
+                  ? Math.max(0, availableActions.length - 1)
+                  : current - 1,
+              )
+            }
+          >
+            ‹
+          </button>
+          <div className="home-daily-actions__grid">
+            {visibleActions.map((action) => (
+              <DailyActionCard
+                key={action.id}
+                action={action}
+                record={todayActivityByAction.get(action.id) ?? null}
+                onFold={() => {
+                  recordDailyActivity({ actionId: action.id })
+                  showPigFeedback(FEEDBACK_POSES[action.category])
+                }}
+                disabled={!canRecordToday}
+              />
+            ))}
+            {Array.from({ length: Math.max(0, 2 - visibleActions.length) }).map(
+              (_, index) => (
+                <button
+                  className="home-action-placeholder"
+                  type="button"
+                  key={`placeholder-${index}`}
+                  onClick={() => navigate('/settings')}
+                >
+                  <span aria-hidden="true">?</span>
+                  <strong>添加行动</strong>
+                </button>
+              ),
+            )}
+          </div>
+          <button
+            className="home-daily-actions__arrow"
+            type="button"
+            aria-label="查看更多行动"
+            disabled={availableActions.length <= 2}
+            onClick={() =>
+              setActionPageStart((current) =>
+                availableActions.length > 0
+                  ? (current + 1) % availableActions.length
+                  : 0,
+              )
+            }
+          >
+            ›
+          </button>
         </div>
       </section>
 
@@ -303,32 +380,30 @@ export default function HomePage() {
         <h2 id="home-todos-title">待办</h2>
         {todos.length > 0 ? (
           <ul>
-            {todos.map((todo) => (
-              <li key={todo.id}>
+            {todos.map((todo, index) => (
+              <li
+                className={[
+                  todo.completed ? 'home-todos__item--completed' : '',
+                  todo.completed &&
+                  incompleteTodos.length > 0 &&
+                  index === incompleteTodos.length
+                    ? 'home-todos__item--completed-first'
+                    : '',
+                ].filter(Boolean).join(' ')}
+                key={todo.id}
+              >
                 <label>
                   <input
                     type="checkbox"
                     checked={todo.completed}
-                    onChange={() =>
-                      setTodos((current) =>
-                        current.map((item) =>
-                          item.id === todo.id
-                            ? { ...item, completed: !item.completed }
-                            : item,
-                        ),
-                      )
-                    }
+                    onChange={() => toggleCycleTodo(todo.id)}
                   />
                   <span>{todo.text}</span>
                 </label>
                 <button
                   type="button"
                   aria-label={`删除${todo.text}`}
-                  onClick={() =>
-                    setTodos((current) =>
-                      current.filter((item) => item.id !== todo.id),
-                    )
-                  }
+                  onClick={() => deleteCycleTodo(todo.id)}
                 >
                   ×
                 </button>
@@ -336,7 +411,7 @@ export default function HomePage() {
             ))}
           </ul>
         ) : (
-          <p className="home-todos__empty">记下一件今天想准备的小事。</p>
+          <p className="home-todos__empty">记下一件这一场想完成的小事。</p>
         )}
         <form
           onSubmit={(event) => {
@@ -346,24 +421,19 @@ export default function HomePage() {
               return
             }
 
-            setTodos((current) => [
-              ...current,
-              {
-                id:
-                  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                    ? crypto.randomUUID()
-                    : `todo-${Date.now()}`,
-                text,
-                completed: false,
-              },
-            ])
+            if (!activeCycle) {
+              return
+            }
+
+            addCycleTodo(activeCycle.id, text)
             setTodoDraft('')
           }}
         >
           <input
             value={todoDraft}
-            aria-label="新的小事"
+            aria-label="新的待办"
             placeholder="例如：准备运动服"
+            disabled={!activeCycle}
             onChange={(event) => setTodoDraft(event.target.value)}
           />
           <button type="submit">添加</button>

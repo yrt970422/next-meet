@@ -1,17 +1,26 @@
 import { APP_STORAGE_KEY } from './storageKeys'
+import { resolveCurrentCycle } from './currentCycle'
 import { getDefaultExerciseTypes } from '../constants/defaults'
 import type {
+  Action,
+  ActionCategory,
   ActivityRecord,
   ActivitySource,
-  ActivityType,
   AppState,
+  CycleTodo,
   ExerciseType,
   Goal,
   GoalType,
+  UserSettings,
 } from '../types/models'
+
+const LEGACY_HOME_TODOS_PREFIX = 'next-meet:home-todos:v1:'
 
 interface LegacyActivityMetadata {
   action?: string
+  actionName?: string
+  actionCategory?: ActionCategory
+  actionNote?: string
   exerciseTypeId?: string
   weight?: number
   reps?: number
@@ -23,8 +32,9 @@ interface LegacyActivityMetadata {
 interface LegacyActivityRecord {
   id: string
   cycleId: string
-  goalId: string
-  type?: GoalType | ActivityType
+  goalId?: string
+  actionId?: string
+  type?: GoalType | 'workout' | 'sleep' | 'action'
   date?: string
   completedAt?: string
   recordedAt?: string
@@ -41,15 +51,78 @@ interface LegacyCardInventoryItem {
   activityRecord?: LegacyActivityRecord | null
 }
 
+interface LegacyHomeTodo {
+  id?: string
+  text?: string
+  completed?: boolean
+}
+
 interface StoredAppState
   extends Omit<
     AppState,
-    'activities' | 'exerciseTypes' | 'schemaVersion'
+    | 'actions'
+    | 'activities'
+    | 'exerciseTypes'
+    | 'todos'
+    | 'settings'
+    | 'schemaVersion'
   > {
   schemaVersion?: number
+  actions?: Action[]
   activities?: LegacyActivityRecord[]
   exerciseTypes?: ExerciseType[]
+  todos?: CycleTodo[]
+  settings: Omit<UserSettings, 'carryOverUnfinishedTodos'> & {
+    carryOverUnfinishedTodos?: boolean
+  }
   cards?: LegacyCardInventoryItem[]
+}
+
+function loadLegacyHomeTodos(cycleId: string): CycleTodo[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  const todosById = new Map<string, CycleTodo>()
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (!key?.startsWith(LEGACY_HOME_TODOS_PREFIX)) {
+      continue
+    }
+
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(key) ?? '[]')
+      if (!Array.isArray(parsed)) {
+        continue
+      }
+
+      parsed.forEach((item: LegacyHomeTodo, itemIndex) => {
+        const text = typeof item.text === 'string' ? item.text.trim() : ''
+        if (!text) {
+          return
+        }
+
+        const legacyId =
+          typeof item.id === 'string'
+            ? item.id
+            : `${key.slice(LEGACY_HOME_TODOS_PREFIX.length)}-${itemIndex}`
+        const createdAt = new Date().toISOString()
+        todosById.set(legacyId, {
+          id: legacyId,
+          cycleId,
+          text,
+          completed: item.completed === true,
+          createdAt,
+          completedAt: item.completed === true ? createdAt : undefined,
+        })
+      })
+    } catch {
+      // Ignore malformed legacy todo entries and keep loading app data.
+    }
+  }
+
+  return [...todosById.values()]
 }
 
 function normalizeGoal(goal: Goal): Goal {
@@ -152,24 +225,79 @@ function formatLocalDate(timestamp: string) {
   return `${year}-${month}-${day}`
 }
 
+function deriveActions(
+  cycles: AppState['cycles'],
+  exerciseTypes: ExerciseType[],
+  sleepTargetTime: string,
+) {
+  const exerciseTypesById = new Map(
+    exerciseTypes.map((exerciseType) => [exerciseType.id, exerciseType]),
+  )
+  const createdAt = new Date().toISOString()
+
+  return cycles.flatMap((cycle) =>
+    cycle.goals.flatMap((goal): Action[] => {
+      if (goal.type === 'todo') {
+        return []
+      }
+
+      if (goal.type === 'sleep') {
+        return [
+          {
+            id: `action-${goal.id}`,
+            cycleId: cycle.id,
+            category: 'rest',
+            name: goal.title ?? '早睡',
+            note: `${sleepTargetTime} 前休息`,
+            targetCount: goal.targetCount,
+            icon: '🌙',
+            createdAt,
+            updatedAt: createdAt,
+          },
+        ]
+      }
+
+      const exerciseType = goal.exerciseTypeId
+        ? exerciseTypesById.get(goal.exerciseTypeId)
+        : undefined
+
+      return [
+        {
+          id: `action-${goal.id}`,
+          cycleId: cycle.id,
+          category: 'health',
+          name: exerciseType?.name ?? goal.title ?? '运动',
+          note:
+            exerciseType?.category === 'strength'
+              ? '60 分钟'
+              : '30 分钟',
+          targetCount: goal.targetCount,
+          icon: exerciseType?.icon ?? '💪',
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ]
+    }),
+  )
+}
+
 function normalizeActivity(
   activity: LegacyActivityRecord,
   goalTypes: Map<string, GoalType>,
+  actionsById: Map<string, Action>,
+  actionIdByGoalId: Map<string, string>,
+  actionIdByExercise: Map<string, string>,
   cardDate?: string | null,
 ): ActivityRecord | null {
-  const legacyType = activity.type ?? goalTypes.get(activity.goalId)
+  const legacyType =
+    activity.type ??
+    (activity.goalId ? goalTypes.get(activity.goalId) : undefined)
   const recordedAt = activity.recordedAt ?? activity.completedAt
 
-  if (
-    !legacyType ||
-    legacyType === 'todo' ||
-    !recordedAt
-  ) {
+  if (!legacyType || legacyType === 'todo' || !recordedAt) {
     return null
   }
 
-  const type: ActivityType =
-    legacyType === 'sleep' ? 'sleep' : 'workout'
   const migratedExerciseTypeId =
     legacyType === 'strength'
       ? 'strength-default'
@@ -177,28 +305,57 @@ function normalizeActivity(
         ? 'cardio-default'
         : activity.metadata?.exerciseTypeId ??
           activity.metadata?.action
+  const actionId =
+    activity.actionId ??
+    (migratedExerciseTypeId
+      ? actionIdByExercise.get(
+          `${activity.cycleId}:${migratedExerciseTypeId}`,
+        )
+      : undefined) ??
+    (activity.goalId ? actionIdByGoalId.get(activity.goalId) : undefined)
+  const action = actionId ? actionsById.get(actionId) : undefined
+
+  if (!actionId || !action) {
+    return null
+  }
 
   return {
     id: activity.id,
     cycleId: activity.cycleId,
-    goalId: activity.goalId,
-    type,
+    actionId,
+    type: 'action',
     date: activity.date ?? cardDate ?? formatLocalDate(recordedAt),
     recordedAt,
     source: activity.source ?? 'migration',
     metadata: {
-      exerciseTypeId:
-        type === 'workout' ? migratedExerciseTypeId : undefined,
+      exerciseTypeId: migratedExerciseTypeId,
       weight: activity.metadata?.weight,
       reps: activity.metadata?.reps,
       durationMinutes: activity.metadata?.durationMinutes,
       sleepTime: activity.metadata?.sleepTime,
       note: activity.metadata?.note ?? activity.note,
+      actionName: activity.metadata?.actionName ?? action.name,
+      actionCategory:
+        activity.metadata?.actionCategory ?? action.category,
+      actionNote: activity.metadata?.actionNote ?? action.note,
     },
   }
 }
 
 function migrateStoredState(state: StoredAppState): AppState {
+  if (
+    state.schemaVersion === 6 &&
+    Array.isArray(state.actions) &&
+    Array.isArray(state.activities) &&
+    Array.isArray(state.todos) &&
+    Array.isArray(state.exerciseTypes) &&
+    typeof state.settings.carryOverUnfinishedTodos === 'boolean'
+  ) {
+    // Current-schema snapshots are already canonical. Returning them unchanged
+    // keeps imported backups exact and avoids injecting defaults or sample data.
+    return state as unknown as AppState
+  }
+
   const storedGoals = state.goals.map(normalizeGoal)
   const storedCycles = state.cycles.map((cycle) => ({
     ...cycle,
@@ -227,25 +384,75 @@ function migrateStoredState(state: StoredAppState): AppState {
     })
   })
   const exerciseTypes = [...exerciseTypesById.values()]
-  const cycles = storedCycles.map((cycle) => ({
+  const migratedCycles = storedCycles.map((cycle) => ({
     ...cycle,
     goals: migrateExerciseGoals(cycle.id, cycle.goals, exerciseTypes),
   }))
+  const cycles = migratedCycles
+  const currentCycleId =
+    resolveCurrentCycle(cycles, state.activeCycleId)?.id ??
+    state.activeCycleId
   const goals = cycles.flatMap((cycle) => cycle.goals)
+  const migratedActions =
+    state.schemaVersion === 6 && state.actions
+      ? state.actions
+      : deriveActions(cycles, exerciseTypes, state.settings.sleepTargetTime)
+  const actions = migratedActions
+  const actionsById = new Map(actions.map((action) => [action.id, action]))
+  const actionIdByGoalId = new Map<string, string>()
+  const actionIdByExercise = new Map<string, string>()
+
+  cycles.forEach((cycle) => {
+    cycle.goals.forEach((goal) => {
+      const derivedAction = actions.find(
+        (action) => action.id === `action-${goal.id}`,
+      )
+      if (derivedAction) {
+        actionIdByGoalId.set(goal.id, derivedAction.id)
+      }
+      if (goal.exerciseTypeId && derivedAction) {
+        actionIdByExercise.set(
+          `${cycle.id}:${goal.exerciseTypeId}`,
+          derivedAction.id,
+        )
+      }
+    })
+  })
+  const todoCycleId = currentCycleId ?? cycles[0]?.id
+  const migratedTodos =
+    (state.schemaVersion ?? 0) >= 5
+      ? (state.todos ?? [])
+      : todoCycleId
+        ? loadLegacyHomeTodos(todoCycleId)
+        : []
+  const todos = migratedTodos
 
   legacyCards.forEach((card) => {
     if (!card.activityRecord) {
       return
     }
 
-    const activity = normalizeActivity(card.activityRecord, goalTypes, card.date)
+    const activity = normalizeActivity(
+      card.activityRecord,
+      goalTypes,
+      actionsById,
+      actionIdByGoalId,
+      actionIdByExercise,
+      card.date,
+    )
     if (activity) {
       activitiesById.set(activity.id, activity)
     }
   })
 
   ;(state.activities ?? []).forEach((legacyActivity) => {
-    const activity = normalizeActivity(legacyActivity, goalTypes)
+    const activity = normalizeActivity(
+      legacyActivity,
+      goalTypes,
+      actionsById,
+      actionIdByGoalId,
+      actionIdByExercise,
+    )
     if (!activity) {
       return
     }
@@ -253,19 +460,24 @@ function migrateStoredState(state: StoredAppState): AppState {
     const existing = activitiesById.get(activity.id)
     activitiesById.set(activity.id, existing ? { ...activity, date: existing.date } : activity)
   })
-
   return {
-    schemaVersion: 4,
+    schemaVersion: 6,
     cycles,
-    activeCycleId: state.activeCycleId,
+    activeCycleId: currentCycleId,
     goals,
+    actions,
     activities: [...activitiesById.values()].sort((left, right) =>
       right.recordedAt.localeCompare(left.recordedAt),
     ),
+    todos,
     exerciseTypes,
     achievements: state.achievements,
     pig: state.pig,
-    settings: state.settings,
+    settings: {
+      ...state.settings,
+      carryOverUnfinishedTodos:
+        state.settings.carryOverUnfinishedTodos ?? true,
+    },
   }
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAppState } from '../app/providers/useAppState'
-import type { ActivityRecord, ExerciseType } from '../types/models'
+import { resolveActionCategoryLogo } from '../assets/cards'
+import { resolveCurrentCycle } from '../services/currentCycle'
+import type { ActivityRecord } from '../types/models'
 import './CyclePage.css'
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
@@ -45,6 +47,17 @@ function formatTime(value: string) {
       }).format(date)
 }
 
+function formatCompletedTodoDate(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? ''
+    : new Intl.DateTimeFormat('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+      }).format(date)
+}
+
 function monthLabel(monthKey: string) {
   const [year, month] = monthKey.split('-').map(Number)
   return `${year}年${month}月`
@@ -71,40 +84,34 @@ function getMonthCells(monthKey: string) {
   ]
 }
 
-function getWorkoutName(
-  record: ActivityRecord,
-  exerciseTypesById: Map<string, ExerciseType>,
-) {
-  const exerciseTypeId = record.metadata?.exerciseTypeId
-  return exerciseTypeId
-    ? (exerciseTypesById.get(exerciseTypeId)?.name ?? '运动')
-    : '运动'
-}
-
 export default function CyclePage() {
   const {
     state,
-    setActiveCycleId,
     recordActivityForDate,
     deleteActivityRecord,
   } = useAppState()
   const today = formatLocalDate(new Date())
-  const activeCycle =
-    state.cycles.find((cycle) => cycle.id === state.activeCycleId) ??
-    state.cycles[0]
-  const enabledExerciseTypes = state.exerciseTypes.filter(
-    (exerciseType) => exerciseType.enabled,
+  const currentCycle = resolveCurrentCycle(
+    state.cycles,
+    state.activeCycleId,
+    today,
+  )
+  const [viewedCycleId, setViewedCycleId] = useState(
+    () => currentCycle?.id ?? '',
+  )
+  const viewedCycle =
+    state.cycles.find((cycle) => cycle.id === viewedCycleId) ??
+    currentCycle
+  const cycleActions = state.actions.filter(
+    (action) => action.cycleId === viewedCycle?.id && !action.deletedAt,
   )
   const [visibleMonth, setVisibleMonth] = useState(
-    () => (activeCycle?.startDate ?? today).slice(0, 7),
+    () => (viewedCycle?.startDate ?? today).slice(0, 7),
   )
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [isMakeupOpen, setIsMakeupOpen] = useState(false)
-  const [makeupCategory, setMakeupCategory] = useState<'workout' | 'sleep'>(
-    'workout',
-  )
-  const [exerciseTypeId, setExerciseTypeId] = useState(
-    () => enabledExerciseTypes[0]?.id ?? '',
+  const [makeupActionId, setMakeupActionId] = useState(
+    () => cycleActions[0]?.id ?? '',
   )
   const [makeupTime, setMakeupTime] = useState('20:00')
   const [makeupNote, setMakeupNote] = useState('')
@@ -119,7 +126,7 @@ export default function CyclePage() {
     }
   }, [])
 
-  if (!activeCycle) {
+  if (!viewedCycle) {
     return (
       <section className="cycle-page cycle-page--empty">
         <p>还没有周期</p>
@@ -129,109 +136,79 @@ export default function CyclePage() {
   }
 
   const cycleActivities = state.activities.filter(
-    (activity) => activity.cycleId === activeCycle.id,
+    (activity) => activity.cycleId === viewedCycle.id,
   )
-  const exerciseTypesById = new Map(
-    state.exerciseTypes.map((exerciseType) => [
-      exerciseType.id,
-      exerciseType,
-    ]),
+  const actionsById = new Map(
+    state.actions.map((action) => [action.id, action]),
   )
+  const completedCounts = new Map<string, number>()
+  cycleActivities.forEach((activity) => {
+    completedCounts.set(
+      activity.actionId,
+      (completedCounts.get(activity.actionId) ?? 0) + 1,
+    )
+  })
   const activitiesByDate = new Map<string, ActivityRecord[]>()
   cycleActivities.forEach((activity) => {
     const records = activitiesByDate.get(activity.date) ?? []
     activitiesByDate.set(activity.date, [...records, activity])
   })
-
   const selectedRecords = selectedDate
     ? (activitiesByDate.get(selectedDate) ?? [])
     : []
-  const selectedHasWorkout = selectedRecords.some(
-    (record) => record.type === 'workout',
+  const recordedActionIds = new Set(
+    selectedRecords.map((record) => record.actionId),
   )
-  const selectedHasSleep = selectedRecords.some(
-    (record) => record.type === 'sleep',
+  const availableMakeupActions = cycleActions.filter(
+    (action) =>
+      !recordedActionIds.has(action.id) &&
+      (completedCounts.get(action.id) ?? 0) < action.targetCount,
   )
   const canAddForSelectedDate =
     Boolean(selectedDate) &&
     selectedDate! < today &&
-    selectedDate! >= activeCycle.startDate &&
-    selectedDate! <= activeCycle.targetDate
-  const canAddWorkout =
-    canAddForSelectedDate &&
-    !selectedHasWorkout &&
-    enabledExerciseTypes.length > 0 &&
-    activeCycle.goals.some(
-      (goal) => goal.type === 'strength' || goal.type === 'cardio',
+    selectedDate! >= viewedCycle.startDate &&
+    selectedDate! <= viewedCycle.targetDate &&
+    availableMakeupActions.length > 0
+  const completedTodos = state.todos
+    .filter((todo) => todo.cycleId === viewedCycle.id && todo.completed)
+    .sort((left, right) =>
+      (right.completedAt ?? '').localeCompare(left.completedAt ?? ''),
     )
-  const canAddSleep =
-    canAddForSelectedDate &&
-    !selectedHasSleep &&
-    activeCycle.goals.some((goal) => goal.type === 'sleep')
-  const calendarCells = getMonthCells(visibleMonth)
   const daysUntil = Math.max(
     0,
     Math.ceil(
-      (parseLocalDate(activeCycle.targetDate).getTime() -
+      (parseLocalDate(viewedCycle.targetDate).getTime() -
         parseLocalDate(today).getTime()) /
         DAY_IN_MS,
     ),
   )
-  const cycleExerciseTypeIds = new Set([
-    ...activeCycle.goals.flatMap((goal) =>
-      goal.exerciseTypeId ? [goal.exerciseTypeId] : [],
-    ),
-    ...cycleActivities.flatMap((activity) =>
-      activity.metadata?.exerciseTypeId
-        ? [activity.metadata.exerciseTypeId]
-        : [],
-    ),
-  ])
-  const sleepTarget =
-    activeCycle.goals.find((goal) => goal.type === 'sleep')?.targetCount ?? 0
-  const progressItems = [
-    ...state.exerciseTypes
-      .filter(
-        (exerciseType) =>
-          exerciseType.enabled || cycleExerciseTypeIds.has(exerciseType.id),
-      )
-      .map((exerciseType) => ({
-        id: exerciseType.id,
-        label: `${exerciseType.icon ?? ''} ${exerciseType.name}`.trim(),
-        completed: cycleActivities.filter(
-          (activity) =>
-            activity.type === 'workout' &&
-            activity.metadata?.exerciseTypeId === exerciseType.id,
-        ).length,
-        target:
-          activeCycle.goals.find(
-            (goal) => goal.exerciseTypeId === exerciseType.id,
-          )?.targetCount ?? 0,
-      })),
-    {
-      id: 'sleep',
-      label: '早睡',
-      completed: cycleActivities.filter(
-        (activity) => activity.type === 'sleep',
-      ).length,
-      target: sleepTarget,
-    },
-  ].filter((item) => item.target > 0 || item.completed > 0)
+  const cycleStatusText =
+    viewedCycle.targetDate < today
+      ? '这一场已经结束啦'
+      : viewedCycle.targetDate === today
+        ? '就是今天'
+        : `还有 ${daysUntil} 天`
 
   const openDate = (date: string) => {
-    const records = activitiesByDate.get(date) ?? []
-    const hasWorkout = records.some(
-      (record) => record.type === 'workout',
+    const dateRecords = activitiesByDate.get(date) ?? []
+    const dateActionIds = new Set(
+      dateRecords.map((record) => record.actionId),
+    )
+    const firstAvailable = cycleActions.find(
+      (action) =>
+        !dateActionIds.has(action.id) &&
+        (completedCounts.get(action.id) ?? 0) < action.targetCount,
     )
     setSelectedDate(date)
+    setMakeupActionId(firstAvailable?.id ?? '')
     setIsMakeupOpen(false)
-    setMakeupCategory(hasWorkout ? 'sleep' : 'workout')
     setMakeupNote('')
   }
 
   const handleCycleChange = (cycleId: string) => {
     const nextCycle = state.cycles.find((cycle) => cycle.id === cycleId)
-    setActiveCycleId(cycleId)
+    setViewedCycleId(cycleId)
     if (nextCycle) {
       setVisibleMonth(nextCycle.startDate.slice(0, 7))
     }
@@ -241,45 +218,18 @@ export default function CyclePage() {
 
   const handleMakeupSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (
-      !selectedDate ||
-      !canAddForSelectedDate ||
-      (makeupCategory === 'workout' && selectedHasWorkout) ||
-      (makeupCategory === 'sleep' && selectedHasSleep)
-    ) {
-      return
-    }
-
-    const selectedExercise = state.exerciseTypes.find(
-      (exerciseType) =>
-        exerciseType.id === exerciseTypeId && exerciseType.enabled,
+    const selectedAction = availableMakeupActions.find(
+      (action) => action.id === makeupActionId,
     )
-    const goal =
-      makeupCategory === 'sleep'
-        ? activeCycle.goals.find((candidate) => candidate.type === 'sleep')
-        : activeCycle.goals.find(
-            (candidate) =>
-              candidate.exerciseTypeId === selectedExercise?.id,
-          ) ??
-          activeCycle.goals.find((candidate) =>
-            selectedExercise?.category === 'strength'
-              ? candidate.type === 'strength'
-              : candidate.type === 'cardio',
-          )
-
-    if (!goal || (makeupCategory === 'workout' && !selectedExercise)) {
+    if (!selectedDate || !canAddForSelectedDate || !selectedAction) {
       return
     }
 
     recordActivityForDate({
-      goalId: goal.id,
+      actionId: selectedAction.id,
       date: selectedDate,
       time: makeupTime,
       note: makeupNote.trim() || undefined,
-      metadata:
-        makeupCategory === 'workout'
-          ? { exerciseTypeId: selectedExercise?.id }
-          : { sleepTime: makeupTime },
     })
     setIsMakeupOpen(false)
     setMakeupNote('')
@@ -287,11 +237,9 @@ export default function CyclePage() {
 
   const handleDeleteRecord = (activityId: string) => {
     deleteActivityRecord(activityId)
-
     if (snackbarTimer.current !== null) {
       window.clearTimeout(snackbarTimer.current)
     }
-
     setSnackbarMessage('已删除这条记录')
     snackbarTimer.current = window.setTimeout(() => {
       setSnackbarMessage(null)
@@ -303,23 +251,21 @@ export default function CyclePage() {
     <section className="cycle-page" aria-labelledby="cycle-page-title">
       <header className="cycle-page__header">
         <label>
-          <span>当前周期</span>
+          <span>查看周期</span>
           <select
-            value={activeCycle.id}
+            value={viewedCycle.id}
             onChange={(event) => handleCycleChange(event.target.value)}
           >
             {state.cycles.map((cycle) => (
-              <option key={cycle.id} value={cycle.id}>
-                {cycle.title}
-              </option>
+              <option key={cycle.id} value={cycle.id}>{cycle.title}</option>
             ))}
           </select>
         </label>
-        <h2 id="cycle-page-title">{activeCycle.title}</h2>
+        <h2 id="cycle-page-title">{viewedCycle.title}</h2>
         <p>
-          {formatShortDate(activeCycle.startDate)} –{' '}
-          {formatShortDate(activeCycle.targetDate)}
-          <strong>还有 {daysUntil} 天</strong>
+          {formatShortDate(viewedCycle.startDate)} –{' '}
+          {formatShortDate(viewedCycle.targetDate)}
+          <strong>{cycleStatusText}</strong>
         </p>
       </header>
 
@@ -341,46 +287,30 @@ export default function CyclePage() {
             ›
           </button>
         </div>
-
         <div className="cycle-calendar__weekdays" aria-hidden="true">
-          {WEEKDAYS.map((weekday) => (
-            <span key={weekday}>{weekday}</span>
-          ))}
+          {WEEKDAYS.map((weekday) => <span key={weekday}>{weekday}</span>)}
         </div>
         <div className="cycle-calendar__grid">
-          {calendarCells.map((date, index) => {
-            if (!date) {
-              return <span key={`blank-${index}`} />
-            }
-
-            const records = activitiesByDate.get(date) ?? []
-            const hasWorkout = records.some(
-              (record) => record.type === 'workout',
-            )
-            const hasSleep = records.some(
-              (record) => record.type === 'sleep',
-            )
+          {getMonthCells(visibleMonth).map((date, index) => {
+            if (!date) return <span key={`blank-${index}`} />
+            const hasRecords = (activitiesByDate.get(date)?.length ?? 0) > 0
             const inCycle =
-              date >= activeCycle.startDate && date <= activeCycle.targetDate
-
+              date >= viewedCycle.startDate && date <= viewedCycle.targetDate
             return (
               <button
                 className={[
                   'cycle-calendar__day',
-                  hasWorkout ? 'cycle-calendar__day--workout' : '',
-                  hasSleep ? 'cycle-calendar__day--sleep' : '',
+                  hasRecords ? 'cycle-calendar__day--recorded' : '',
                   selectedDate === date
                     ? 'cycle-calendar__day--selected'
                     : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+                ].filter(Boolean).join(' ')}
                 key={date}
                 type="button"
                 disabled={!inCycle}
                 aria-label={`${formatDetailDate(date)}${
-                  hasWorkout ? '，有运动记录' : ''
-                }${hasSleep ? '，有早睡记录' : ''}`}
+                  hasRecords ? '，有行动记录' : ''
+                }`}
                 onClick={() => openDate(date)}
               >
                 {Number(date.slice(-2))}
@@ -389,35 +319,62 @@ export default function CyclePage() {
           })}
         </div>
         <div className="cycle-calendar__legend">
-          <span><i className="cycle-calendar__legend-workout" />运动</span>
-          <span><i className="cycle-calendar__legend-sleep" />早睡</span>
+          <span><i className="cycle-calendar__legend-recorded" />有努力生活哦</span>
         </div>
       </section>
 
       <section className="cycle-progress" aria-labelledby="cycle-progress-title">
         <h3 id="cycle-progress-title">周期进度</h3>
-        <ul>
-          {progressItems.map((item) => {
-            const percentage =
-              item.target > 0
-                ? Math.min(100, (item.completed / item.target) * 100)
-                : 0
+        {cycleActions.length > 0 ? (
+          <ul>
+            {cycleActions.map((action) => {
+              const completed = completedCounts.get(action.id) ?? 0
+              const logo = resolveActionCategoryLogo(action.category, 'small')
+              const percentage = Math.min(
+                100,
+                (completed / action.targetCount) * 100,
+              )
+              return (
+                <li key={action.id}>
+                  <div>
+                    <span className="cycle-progress__label">
+                      <img src={logo.src} alt="" aria-hidden="true" />
+                      <span>{action.name}</span>
+                    </span>
+                    <strong>{completed} / {action.targetCount}</strong>
+                  </div>
+                  <span className="cycle-progress__track" aria-hidden="true">
+                    <span style={{ width: `${percentage}%` }} />
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="cycle-progress__empty">还没有设置行动。</p>
+        )}
+      </section>
 
-            return (
-              <li key={item.id}>
-                <div>
-                  <span>{item.label}</span>
-                  <strong>
-                    {item.completed} / {item.target}
-                  </strong>
-                </div>
-                <span className="cycle-progress__track" aria-hidden="true">
-                  <span style={{ width: `${percentage}%` }} />
-                </span>
+      <section className="cycle-todos" aria-labelledby="cycle-todos-title">
+        <div className="cycle-todos__heading">
+          <h3 id="cycle-todos-title">完成的事情</h3>
+          <span>{completedTodos.length} 件</span>
+        </div>
+        {completedTodos.length > 0 ? (
+          <ul>
+            {completedTodos.map((todo) => (
+              <li key={todo.id}>
+                <span aria-hidden="true">✓</span>
+                <strong>{todo.text}</strong>
+                <time dateTime={todo.completedAt}>
+                  {formatCompletedTodoDate(todo.completedAt)}
+                </time>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+        ) : (
+          <p>这一场完成的待办会留在这里。</p>
+        )}
       </section>
 
       {selectedDate ? (
@@ -446,94 +403,79 @@ export default function CyclePage() {
 
             {selectedRecords.length > 0 ? (
               <ul className="cycle-detail__records">
-                {selectedRecords.map((record) => (
-                  <li key={record.id}>
-                    <span
-                      className={`cycle-detail__record-icon cycle-detail__record-icon--${
-                        record.type === 'sleep' ? 'sleep' : 'workout'
-                      }`}
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <strong>
-                        {record.type === 'sleep'
-                          ? '早点休息'
-                          : getWorkoutName(record, exerciseTypesById)}
-                      </strong>
-                      <time dateTime={record.recordedAt}>
-                        {formatTime(record.recordedAt)}
-                        {record.source === 'makeup' ? ' 添加' : ' 完成'}
-                      </time>
-                      {record.metadata?.note ? (
-                        <p>备注：{record.metadata.note}</p>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteRecord(record.id)}
-                    >
-                      删除
-                    </button>
-                  </li>
-                ))}
+                {selectedRecords.map((record) => {
+                  const action = actionsById.get(record.actionId)
+                  const categoryLogo = action
+                    ? resolveActionCategoryLogo(action.category, 'small')
+                    : null
+                  return (
+                    <li key={record.id}>
+                      <span className="cycle-detail__record-symbol" aria-hidden="true">
+                        {categoryLogo ? (
+                          <img src={categoryLogo.src} alt="" />
+                        ) : null}
+                      </span>
+                      <div>
+                        <strong>
+                          {record.metadata?.actionName ??
+                            action?.name ??
+                            '行动记录'}
+                        </strong>
+                        <time dateTime={record.recordedAt}>
+                          {formatTime(record.recordedAt)}
+                          {record.source === 'makeup' ? ' 添加' : ' 完成'}
+                        </time>
+                        {record.metadata?.actionNote || action?.note ? (
+                          <p>{record.metadata?.actionNote ?? action?.note}</p>
+                        ) : null}
+                        {record.metadata?.note ? (
+                          <p>备注：{record.metadata.note}</p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRecord(record.id)}
+                      >
+                        删除
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             ) : (
               <p className="cycle-detail__empty">这一天还没有留下记录。</p>
             )}
 
-            {(canAddWorkout || canAddSleep) && !isMakeupOpen ? (
+            {canAddForSelectedDate && !isMakeupOpen ? (
               <div className="cycle-detail__add-actions">
-                {canAddWorkout ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMakeupCategory('workout')
-                      setIsMakeupOpen(true)
-                    }}
-                  >
-                    添加运动记录
-                  </button>
-                ) : null}
-                {canAddSleep ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMakeupCategory('sleep')
-                      setIsMakeupOpen(true)
-                    }}
-                  >
-                    添加早睡记录
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMakeupActionId(availableMakeupActions[0]?.id ?? '')
+                    setIsMakeupOpen(true)
+                  }}
+                >
+                  添加行动记录
+                </button>
               </div>
             ) : null}
 
             {isMakeupOpen ? (
               <form className="cycle-makeup" onSubmit={handleMakeupSubmit}>
-                <h4>
-                  {makeupCategory === 'workout'
-                    ? '添加运动记录'
-                    : '添加早睡记录'}
-                </h4>
-
-                {makeupCategory === 'workout' ? (
-                  <label>
-                    <span>今天做了什么</span>
-                    <select
-                      value={exerciseTypeId}
-                      onChange={(event) =>
-                        setExerciseTypeId(event.target.value)
-                      }
-                    >
-                      {enabledExerciseTypes.map((exerciseType) => (
-                        <option key={exerciseType.id} value={exerciseType.id}>
-                          {exerciseType.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-
+                <h4>添加行动记录</h4>
+                <label>
+                  <span>完成了什么</span>
+                  <select
+                    value={makeupActionId}
+                    onChange={(event) => setMakeupActionId(event.target.value)}
+                  >
+                    {availableMakeupActions.map((action) => (
+                      <option key={action.id} value={action.id}>
+                        {action.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label>
                   <span>时间</span>
                   <input
@@ -547,7 +489,6 @@ export default function CyclePage() {
                   <span>备注（可选）</span>
                   <input
                     value={makeupNote}
-                    placeholder="例如：卧推 25kg"
                     onChange={(event) => setMakeupNote(event.target.value)}
                   />
                 </label>

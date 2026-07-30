@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getDefaultAppState } from '../../constants/defaults'
+import { resolveCurrentCycle } from '../../services/currentCycle'
 import { loadAppState, saveAppState } from '../../services/storage'
 import type {
   ActivityRecord,
-  ActivityType,
   AppState,
-  GoalType,
 } from '../../types/models'
 import { AppContext, type AppContextValue } from './AppContext'
 
@@ -21,33 +20,22 @@ function formatLocalDate(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-function getActivityType(goalType: GoalType): ActivityType | null {
-  if (goalType === 'sleep') {
-    return 'sleep'
-  }
-
-  if (goalType === 'strength' || goalType === 'cardio') {
-    return 'workout'
-  }
-
-  return null
-}
-
-function isExerciseCompatibleWithGoal(
-  goalType: GoalType,
-  exerciseCategory: string,
-) {
-  return goalType === 'strength'
-    ? exerciseCategory === 'strength'
-    : goalType === 'cardio'
-      ? exerciseCategory !== 'strength'
-      : false
-}
-
 function createActivityId() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `activity-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function createTodoId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `todo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function createActionId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? `action-${crypto.randomUUID()}`
+    : `action-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 function createGoalId(cycleId: string, exerciseTypeId: string) {
@@ -58,8 +46,20 @@ function createGoalId(cycleId: string, exerciseTypeId: string) {
   }`
 }
 
+function getInitialAppState() {
+  const initialState = loadAppState() ?? getDefaultAppState()
+  const currentCycle = resolveCurrentCycle(
+    initialState.cycles,
+    initialState.activeCycleId,
+  )
+
+  return currentCycle && currentCycle.id !== initialState.activeCycleId
+    ? { ...initialState, activeCycleId: currentCycle.id }
+    : initialState
+}
+
 export function AppProvider({ children }: AppProviderProps) {
-  const [state, setState] = useState<AppState>(() => loadAppState() ?? getDefaultAppState())
+  const [state, setState] = useState<AppState>(getInitialAppState)
 
   useEffect(() => {
     saveAppState(state)
@@ -67,8 +67,20 @@ export function AppProvider({ children }: AppProviderProps) {
 
   const value = useMemo<AppContextValue>(() => ({
     state,
+    replaceAppState: (nextState) => {
+      setState(nextState)
+    },
     setActiveCycleId: (cycleId) => {
-      setState((prev) => ({ ...prev, activeCycleId: cycleId }))
+      setState((prev) => {
+        if (cycleId === null) {
+          return { ...prev, activeCycleId: null }
+        }
+
+        const cycle = prev.cycles.find((candidate) => candidate.id === cycleId)
+        return cycle?.status === 'active'
+          ? { ...prev, activeCycleId: cycleId }
+          : prev
+      })
     },
     updateSettings: (settings) => {
       setState((prev) => ({
@@ -80,12 +92,45 @@ export function AppProvider({ children }: AppProviderProps) {
       }))
     },
     createCycle: (cycle) => {
-      setState((prev) => ({
-        ...prev,
-        cycles: [cycle, ...prev.cycles],
-        activeCycleId: cycle.id,
-        goals: [...cycle.goals, ...prev.goals],
-      }))
+      setState((prev) => {
+        const now = new Date().toISOString()
+        const carriedTodos = prev.settings.carryOverUnfinishedTodos
+          ? prev.todos
+              .filter(
+                (todo) =>
+                  todo.cycleId === prev.activeCycleId && !todo.completed,
+              )
+              .map((todo) => ({
+                id: createTodoId(),
+                cycleId: cycle.id,
+                text: todo.text,
+                completed: false,
+                createdAt: now,
+                carriedFromTodoId: todo.id,
+              }))
+          : []
+        const carriedActions = prev.actions
+          .filter(
+            (action) =>
+              action.cycleId === prev.activeCycleId && !action.deletedAt,
+          )
+          .map((action) => ({
+            ...action,
+            id: createActionId(),
+            cycleId: cycle.id,
+            createdAt: now,
+            updatedAt: now,
+          }))
+
+        return {
+          ...prev,
+          cycles: [cycle, ...prev.cycles],
+          activeCycleId: cycle.id,
+          goals: [...cycle.goals, ...prev.goals],
+          actions: [...carriedActions, ...prev.actions],
+          todos: [...carriedTodos, ...prev.todos],
+        }
+      })
     },
     updateCycle: (cycleId, updates) => {
       setState((prev) => ({
@@ -249,49 +294,154 @@ export function AppProvider({ children }: AppProviderProps) {
         }
       })
     },
-    recordDailyActivity: (input) => {
+    createAction: (action) => {
       setState((prev) => {
-        const goal =
-          prev.goals.find((candidate) => candidate.id === input.goalId) ??
-          prev.cycles
-            .flatMap((cycle) => cycle.goals)
-            .find((candidate) => candidate.id === input.goalId)
-
-        const activityType = goal ? getActivityType(goal.type) : null
-        if (!goal || goal.cycleId !== prev.activeCycleId || !activityType) {
+        if (
+          prev.actions.some((candidate) => candidate.id === action.id) ||
+          !prev.cycles.some((cycle) => cycle.id === action.cycleId)
+        ) {
           return prev
         }
 
+        return {
+          ...prev,
+          actions: [
+            ...prev.actions,
+            {
+              ...action,
+              name: action.name.trim(),
+              note: action.note.trim(),
+              targetCount: Math.max(1, Math.round(action.targetCount)),
+            },
+          ],
+        }
+      })
+    },
+    updateAction: (actionId, updates) => {
+      setState((prev) => ({
+        ...prev,
+        actions: prev.actions.map((action) =>
+          action.id === actionId
+            ? {
+                ...action,
+                ...updates,
+                name: updates.name?.trim() || action.name,
+                note:
+                  updates.note === undefined
+                    ? action.note
+                    : updates.note.trim(),
+                targetCount:
+                  updates.targetCount === undefined
+                    ? action.targetCount
+                    : Math.max(1, Math.round(updates.targetCount)),
+                updatedAt: new Date().toISOString(),
+              }
+            : action,
+        ),
+      }))
+    },
+    deleteAction: (actionId) => {
+      setState((prev) => ({
+        ...prev,
+        actions: prev.actions.map((action) =>
+          action.id === actionId
+            ? {
+                ...action,
+                deletedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+            : action,
+        ),
+      }))
+    },
+    addCycleTodo: (cycleId, text) => {
+      const normalizedText = text.trim()
+      if (!normalizedText) {
+        return
+      }
+
+      setState((prev) => {
+        if (!prev.cycles.some((cycle) => cycle.id === cycleId)) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          todos: [
+            ...prev.todos,
+            {
+              id: createTodoId(),
+              cycleId,
+              text: normalizedText,
+              completed: false,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }
+      })
+    },
+    toggleCycleTodo: (todoId) => {
+      setState((prev) => ({
+        ...prev,
+        todos: prev.todos.map((todo) =>
+          todo.id === todoId
+            ? {
+                ...todo,
+                completed: !todo.completed,
+                completedAt: todo.completed
+                  ? undefined
+                  : new Date().toISOString(),
+              }
+            : todo,
+        ),
+      }))
+    },
+    deleteCycleTodo: (todoId) => {
+      setState((prev) => ({
+        ...prev,
+        todos: prev.todos.filter((todo) => todo.id !== todoId),
+      }))
+    },
+    recordDailyActivity: (input) => {
+      setState((prev) => {
+        const action = prev.actions.find(
+          (candidate) => candidate.id === input.actionId,
+        )
         const now = new Date()
         const date = formatLocalDate(now)
-        const activeCycle = prev.cycles.find((cycle) => cycle.id === goal.cycleId)
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+          date,
+        )
+        if (
+          !action ||
+          action.deletedAt ||
+          action.cycleId !== currentCycle?.id
+        ) {
+          return prev
+        }
+
+        const activeCycle = prev.cycles.find(
+          (cycle) => cycle.id === action.cycleId,
+        )
 
         if (!activeCycle || date < activeCycle.startDate || date > activeCycle.targetDate) {
           return prev
         }
 
-        const exerciseType =
-          activityType === 'workout'
-            ? prev.exerciseTypes.find(
-                (candidate) =>
-                  candidate.id === input.metadata?.exerciseTypeId &&
-                  candidate.enabled,
-              )
-            : null
-
-        if (
-          activityType === 'workout' &&
-          (!exerciseType ||
-            !isExerciseCompatibleWithGoal(goal.type, exerciseType.category))
-        ) {
+        const completedCount = prev.activities.filter(
+          (activity) => activity.actionId === action.id,
+        ).length
+        if (completedCount >= action.targetCount) {
           return prev
         }
 
         const alreadyRecorded = prev.activities.some(
           (activity) =>
-            activity.cycleId === goal.cycleId &&
+            activity.actionId === action.id &&
             activity.date === date &&
-            activity.type === activityType,
+            activity.type === 'action',
         )
 
         if (alreadyRecorded) {
@@ -300,17 +450,18 @@ export function AppProvider({ children }: AppProviderProps) {
 
         const record: ActivityRecord = {
           id: createActivityId(),
-          cycleId: goal.cycleId,
-          goalId: goal.id,
-          type: activityType,
+          cycleId: action.cycleId,
+          actionId: action.id,
+          type: 'action',
           date,
           recordedAt: now.toISOString(),
           source: 'daily',
           metadata: {
             ...input.metadata,
-            exerciseTypeId:
-              activityType === 'workout' ? exerciseType?.id : undefined,
             note: input.note ?? input.metadata?.note,
+            actionName: action.name,
+            actionCategory: action.category,
+            actionNote: action.note,
           },
         }
 
@@ -322,18 +473,16 @@ export function AppProvider({ children }: AppProviderProps) {
     },
     recordActivityForDate: (input) => {
       setState((prev) => {
-        const goal =
-          prev.goals.find((candidate) => candidate.id === input.goalId) ??
-          prev.cycles
-            .flatMap((cycle) => cycle.goals)
-            .find((candidate) => candidate.id === input.goalId)
-
-        const activityType = goal ? getActivityType(goal.type) : null
-        if (!goal || !activityType) {
+        const action = prev.actions.find(
+          (candidate) => candidate.id === input.actionId,
+        )
+        if (!action || action.deletedAt) {
           return prev
         }
 
-        const cycle = prev.cycles.find((candidate) => candidate.id === goal.cycleId)
+        const cycle = prev.cycles.find(
+          (candidate) => candidate.id === action.cycleId,
+        )
         const today = formatLocalDate(new Date())
 
         if (
@@ -345,28 +494,18 @@ export function AppProvider({ children }: AppProviderProps) {
           return prev
         }
 
-        const exerciseType =
-          activityType === 'workout'
-            ? prev.exerciseTypes.find(
-                (candidate) =>
-                  candidate.id === input.metadata?.exerciseTypeId &&
-                  candidate.enabled,
-              )
-            : null
-
-        if (
-          activityType === 'workout' &&
-          (!exerciseType ||
-            !isExerciseCompatibleWithGoal(goal.type, exerciseType.category))
-        ) {
+        const completedCount = prev.activities.filter(
+          (activity) => activity.actionId === action.id,
+        ).length
+        if (completedCount >= action.targetCount) {
           return prev
         }
 
         const alreadyRecorded = prev.activities.some(
           (activity) =>
-            activity.cycleId === goal.cycleId &&
+            activity.actionId === action.id &&
             activity.date === input.date &&
-            activity.type === activityType,
+            activity.type === 'action',
         )
 
         if (alreadyRecorded) {
@@ -380,17 +519,18 @@ export function AppProvider({ children }: AppProviderProps) {
 
         const record: ActivityRecord = {
           id: createActivityId(),
-          cycleId: goal.cycleId,
-          goalId: goal.id,
-          type: activityType,
+          cycleId: action.cycleId,
+          actionId: action.id,
+          type: 'action',
           date: input.date,
           recordedAt: recordedAt.toISOString(),
           source: 'makeup',
           metadata: {
             ...input.metadata,
-            exerciseTypeId:
-              activityType === 'workout' ? exerciseType?.id : undefined,
             note: input.note ?? input.metadata?.note,
+            actionName: action.name,
+            actionCategory: action.category,
+            actionNote: action.note,
           },
         }
 
