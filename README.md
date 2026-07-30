@@ -1,75 +1,192 @@
-# React + TypeScript + Vite
+# next-meet
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+<p align="center">
+  <img src="./public/apple-touch-icon.png" width="120" alt="next-meet 小猪 App 图标" />
+</p>
 
-Currently, two official plugins are available:
+<p align="center">
+  <strong>为下一场见面，温柔地照顾自己。</strong>
+</p>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+next-meet（下一场见）是一款围绕“下一次重要见面”设计的移动端 Web App。
 
-## React Compiler
+用户可以为演唱会、旅行、生日或任何值得期待的日子建立一个周期，在等待见面的这段时间里，通过一张张行动卡记录运动、休息、学习、兴趣与生活中的小事。每完成一次行动，就向右折下一张卡；小猪会短暂地回应用户，并陪用户一起走到下一场见面。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+它不是一个强调效率和打卡压力的任务管理工具，也不是需要用户照顾的宠物养成游戏。next-meet 更像一本带着小猪伙伴的私人手账：
 
-## Expanding the ESLint configuration
+> 不是催促自己完成任务，而是在期待下一场见面的过程中，好好照顾自己。
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 核心体验
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```text
+设置下一场见面的日期
+        ↓
+创建这一周期想坚持的行动
+        ↓
+每天收到属于自己的行动卡
+        ↓
+向右滑动，折下完成的卡片
+        ↓
+留下 ActivityRecord 成长记录
+        ↓
+在周期日历中回顾这段准备
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 主要功能
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 首页：今天想做什么
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- 展示下一场见面的倒计时、周期名称与目标日期
+- 由原创小猪角色提供陪伴和完成反馈
+- 根据当前周期目标展示每日行动卡
+- 通过向右滑动完成折卡，避免与页面上下滚动冲突
+- 同一个行动每天最多记录一次
+- 支持周期内持续存在的待办事项
 
+### 行动卡：每件想坚持的事都是一张卡
+
+用户可以自由创建行动，并设置名称、小提示与周期目标次数。目前支持六类行动：
+
+- 💪 运动
+- 🌱 身体照顾
+- 🌙 休息
+- ✨ 学习与兴趣
+- 🚀 工作
+- 🌈 自定义
+
+分类用于组织行动和匹配小猪的反馈状态；真正被记录和统计的是用户创建的具体行动，例如“跑步”“阅读”“早睡”或“写日记”。
+
+### 周期：看看这一场留下了什么
+
+- 查看当前或过去的周期
+- 通过日历浏览真实的行动记录
+- 查看某一天完成的具体行动与时间
+- 为过去的日期添加记录
+- 删除已有记录
+- 按每一项具体行动查看周期进度
+- 回顾本周期完成的待办事项
+
+在周期页面切换历史周期只影响回顾内容，首页始终使用当前正在进行的周期。
+
+### 设置：调整如何照顾自己
+
+- 修改小猪名字并查看成长等级
+- 编辑当前周期的名称、开始日期和目标日期
+- 新增、修改或停用行动
+- 设置每项行动在本周期内的目标次数
+- 设置新周期是否继承上周期未完成的待办
+- 保存或恢复完整的搬家记录
+- 查看 iPhone 与 Android 添加到桌面的步骤
+
+## 小猪伙伴
+
+小猪是 next-meet 的核心陪伴角色，也是用户努力的见证者。
+
+- 它不是需要喂养或照顾的宠物
+- 它不会因为用户没有完成行动而生气、虚弱或退化
+- 完成行动后，首页小猪会根据行动分类短暂切换反馈状态
+- 反馈结束后，小猪恢复默认形象，继续陪用户等待下一场见面
+
+角色采用低饱和粉色、粗而轻微不规则的手绘线条和二维贴纸风格，整体希望呈现出“像画在个人手账里的一位小猪朋友”的感觉。
+
+## 数据与隐私
+
+next-meet 采用本地优先的数据方式：
+
+- 周期、行动、记录、待办和个性化设置保存在浏览器 `localStorage`
+- 项目不会主动上传用户的日记、打卡或生活记录
+- 支持导出完整备份，并在另一台设备上恢复
+- 备份包含周期、行动、ActivityRecord、待办、小猪状态和用户设置
+- 历史版本的数据会在读取时进行兼容迁移
+
+由于数据保存在浏览器中，建议使用普通浏览模式。无痕或隐私浏览模式可能会在页面关闭后清除记录。
+
+## 设计方向
+
+next-meet 的视觉关键词是：
+
+- 温柔陪伴
+- 暖纸张与手账感
+- 低饱和 pastel 色彩
+- 手绘贴纸与轻微不完美
+- 轻养成、低压力
+
+设计上刻意避免：
+
+- 游戏奖励面板
+- 健身数据仪表盘
+- SaaS 后台和复杂任务管理器
+- 排行榜、竞争机制与失败惩罚
+- 过度儿童化或商业卡通 IP 感
+
+相关设计文档：
+
+- [早期产品需求文档](./docs/PRD.md)
+- [next-meet Design System](./docs/NEXT_MEET_DESIGN_SYSTEM.md)
+- [小猪角色设计指南](./docs/PIG_CHARACTER_GUIDE.md)
+
+## 技术栈
+
+- React 19
+- TypeScript
+- React Router
+- Vite
+- CSS Design Tokens
+- Browser Local Storage
+
+项目当前没有后端服务，核心状态由 React Provider 管理并持久化到浏览器。
+
+## 本地运行
+
+需要安装 Node.js 和 npm。
+
+```bash
+# 安装依赖
+npm install
+
+# 启动开发环境
+npm run dev
 ```
+
+Vite 会在终端中输出本地访问地址。
+
+其他常用命令：
+
+```bash
+# 代码检查
+npm run lint
+
+# 类型检查并构建生产版本
+npm run build
+
+# 预览生产构建
+npm run preview
+```
+
+## 项目结构
+
+```text
+src/
+├── app/                  # Router、AppShell 与全局 Provider
+├── assets/               # 小猪、行动分类和设置页视觉资产
+├── components/           # Pig、DailyActionCard、Settings 等组件
+├── constants/            # 首次使用的默认数据
+├── pages/                # Home、Cycle、Settings 三个主页面
+├── services/             # 本地存储、数据迁移、备份与周期解析
+└── types/                # Cycle、Action、ActivityRecord 等数据模型
+
+docs/
+├── PRD.md
+├── NEXT_MEET_DESIGN_SYSTEM.md
+└── PIG_CHARACTER_GUIDE.md
+```
+
+## 当前状态
+
+next-meet 仍处于持续设计与开发阶段。目前核心闭环已经可以运行：
+
+```text
+创建周期 → 设置行动 → 每日折卡 → 留下记录 → 周期回顾
+```
+
+项目会继续围绕“为了下一场见面，温柔地照顾自己”这一核心体验进行迭代。
