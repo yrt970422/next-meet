@@ -69,6 +69,16 @@ function shiftMonth(monthKey: string, amount: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
+function getCycleCalendarMonth(
+  startDate: string,
+  targetDate: string,
+  today: string,
+) {
+  if (today < startDate) return startDate.slice(0, 7)
+  if (today > targetDate) return targetDate.slice(0, 7)
+  return today.slice(0, 7)
+}
+
 function getMonthCells(monthKey: string) {
   const [year, month] = monthKey.split('-').map(Number)
   const firstDay = new Date(year, month - 1, 1)
@@ -106,7 +116,13 @@ export default function CyclePage() {
     (action) => action.cycleId === viewedCycle?.id && !action.deletedAt,
   )
   const [visibleMonth, setVisibleMonth] = useState(
-    () => (viewedCycle?.startDate ?? today).slice(0, 7),
+    () => viewedCycle
+      ? getCycleCalendarMonth(
+          viewedCycle.startDate,
+          viewedCycle.targetDate,
+          today,
+        )
+      : today.slice(0, 7),
   )
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [isMakeupOpen, setIsMakeupOpen] = useState(false)
@@ -210,7 +226,13 @@ export default function CyclePage() {
     const nextCycle = state.cycles.find((cycle) => cycle.id === cycleId)
     setViewedCycleId(cycleId)
     if (nextCycle) {
-      setVisibleMonth(nextCycle.startDate.slice(0, 7))
+      setVisibleMonth(
+        getCycleCalendarMonth(
+          nextCycle.startDate,
+          nextCycle.targetDate,
+          today,
+        ),
+      )
     }
     setSelectedDate(null)
     setIsMakeupOpen(false)
