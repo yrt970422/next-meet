@@ -55,6 +55,14 @@ interface ActionDraft {
   icon: string
 }
 
+interface SettingsDateFieldProps {
+  label: string
+  value: string
+  min?: string
+  max?: string
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void
+}
+
 const CATEGORY_LABELS: Record<ActionCategory, string> = {
   health: '运动',
   bodyCare: '身体照顾',
@@ -149,6 +157,43 @@ function formatShortDate(value: string) {
     month: 'numeric',
     day: 'numeric',
   }).format(parseLocalDate(value))
+}
+
+function formatDateFieldValue(value: string) {
+  if (!value) return '请选择日期'
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(parseLocalDate(value))
+}
+
+function SettingsDateField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: SettingsDateFieldProps) {
+  return (
+    <label>
+      <span>{label}</span>
+      <span className="settings-date-field">
+        <span className="settings-date-field__value" aria-hidden="true">
+          {formatDateFieldValue(value)}
+        </span>
+        <input
+          type="date"
+          aria-label={label}
+          min={min}
+          max={max}
+          value={value}
+          onChange={onChange}
+        />
+      </span>
+    </label>
+  )
 }
 
 function addDays(value: string, amount: number) {
@@ -912,30 +957,24 @@ export default function SettingsPage() {
               />
             </label>
             <div className="settings-form__columns">
-              <label>
-                <span>开始日期</span>
-                <input
-                  type="date"
-                  max={today}
-                  value={cycleStartDate}
-                  onChange={(event) => {
-                    setCycleStartDate(event.target.value)
-                    setCycleError('')
-                  }}
-                />
-              </label>
-              <label>
-                <span>目标日期</span>
-                <input
-                  type="date"
-                  min={addDays(cycleStartDate, 1)}
-                  value={cycleTargetDate}
-                  onChange={(event) => {
-                    setCycleTargetDate(event.target.value)
-                    setCycleError('')
-                  }}
-                />
-              </label>
+              <SettingsDateField
+                label="开始日期"
+                max={today}
+                value={cycleStartDate}
+                onChange={(event) => {
+                  setCycleStartDate(event.target.value)
+                  setCycleError('')
+                }}
+              />
+              <SettingsDateField
+                label="目标日期"
+                min={addDays(cycleStartDate, 1)}
+                value={cycleTargetDate}
+                onChange={(event) => {
+                  setCycleTargetDate(event.target.value)
+                  setCycleError('')
+                }}
+              />
             </div>
             {cycleError ? (
               <p className="settings-form__error" role="alert">{cycleError}</p>
