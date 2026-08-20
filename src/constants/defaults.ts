@@ -6,6 +6,7 @@ import type {
   CycleTodo,
   ExerciseType,
 } from '../types/models'
+import { SHANGHAI_PUBLIC_CYCLE } from './publicCycles'
 
 export const SAMPLE_PREVIOUS_CYCLE_ID = 'sample-previous-cycle-v1'
 
@@ -221,7 +222,7 @@ export function getDefaultExerciseTypes(): ExerciseType[] {
 }
 
 const GUIYANG_TARGET_DATE = '2026-08-19'
-const SHANGHAI_TARGET_DATE = '2026-09-12'
+const SHANGHAI_TARGET_DATE = SHANGHAI_PUBLIC_CYCLE.targetDate
 
 export function getDefaultCyclePreset(openedAt = new Date()) {
   const startDate = formatLocalDate(openedAt)
@@ -236,7 +237,7 @@ export function getDefaultCyclePreset(openedAt = new Date()) {
 
   if (startDate < SHANGHAI_TARGET_DATE) {
     return {
-      title: '时空乐园-上海',
+      title: SHANGHAI_PUBLIC_CYCLE.name,
       startDate,
       targetDate: SHANGHAI_TARGET_DATE,
     }

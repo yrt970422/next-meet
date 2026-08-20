@@ -731,29 +731,24 @@
   background: var(--color-paper);
 }
 
-.settings-date-field__value {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-2) var(--space-3);
-  overflow: hidden;
-  color: var(--color-text);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .settings-form .settings-date-field input {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 0;
+  padding: var(--space-2) var(--space-3);
   border: 0;
-  opacity: 0.001;
+  color: var(--color-text);
+  background: transparent;
+  text-align: center;
+  opacity: 1;
   cursor: pointer;
+}
+
+.settings-form .settings-date-field input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: center;
 }
 
 .settings-date-field:focus-within {

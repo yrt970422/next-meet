@@ -159,16 +159,6 @@ function formatShortDate(value: string) {
   }).format(parseLocalDate(value))
 }
 
-function formatDateFieldValue(value: string) {
-  if (!value) return '请选择日期'
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(parseLocalDate(value))
-}
-
 function SettingsDateField({
   label,
   value,
@@ -180,9 +170,6 @@ function SettingsDateField({
     <label>
       <span>{label}</span>
       <span className="settings-date-field">
-        <span className="settings-date-field__value" aria-hidden="true">
-          {formatDateFieldValue(value)}
-        </span>
         <input
           type="date"
           aria-label={label}

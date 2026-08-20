@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getDefaultAppState } from '../../constants/defaults'
+import { ensureCycleLifecycle } from '../../services/cycleLifecycle'
 import { resolveCurrentCycle } from '../../services/currentCycle'
 import { synchronizePigGrowth } from '../../services/pigGrowth'
 import { loadAppState, saveAppState } from '../../services/storage'
@@ -49,14 +50,7 @@ function createGoalId(cycleId: string, exerciseTypeId: string) {
 
 function getInitialAppState() {
   const initialState = loadAppState() ?? getDefaultAppState()
-  const currentCycle = resolveCurrentCycle(
-    initialState.cycles,
-    initialState.activeCycleId,
-  )
-
-  return currentCycle && currentCycle.id !== initialState.activeCycleId
-    ? { ...initialState, activeCycleId: currentCycle.id }
-    : initialState
+  return ensureCycleLifecycle(initialState)
 }
 
 export function AppProvider({ children }: AppProviderProps) {
@@ -70,7 +64,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const value = useMemo<AppContextValue>(() => ({
     state: resolvedState,
     replaceAppState: (nextState) => {
-      setState(nextState)
+      setState(ensureCycleLifecycle(nextState))
     },
     setActiveCycleId: (cycleId) => {
       setState((prev) => {
@@ -135,24 +129,49 @@ export function AppProvider({ children }: AppProviderProps) {
       })
     },
     updateCycle: (cycleId, updates) => {
-      setState((prev) => ({
-        ...prev,
-        cycles: prev.cycles.map((cycle) =>
-          cycle.id === cycleId ? { ...cycle, ...updates } : cycle,
-        ),
-      }))
+      setState((prev) => {
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (currentCycle?.id !== cycleId || currentCycle.status !== 'active') {
+          return prev
+        }
+
+        return {
+          ...prev,
+          cycles: prev.cycles.map((cycle) =>
+            cycle.id === cycleId ? { ...cycle, ...updates } : cycle,
+          ),
+        }
+      })
     },
     updateGoal: (goalId, updates) => {
-      setState((prev) => ({
-        ...prev,
-        goals: prev.goals.map((goal) => (goal.id === goalId ? { ...goal, ...updates } : goal)),
-        cycles: prev.cycles.map((cycle) => ({
-          ...cycle,
-          goals: cycle.goals.map((goal) =>
-            goal.id === goalId ? { ...goal, ...updates } : goal,
+      setState((prev) => {
+        const goal = prev.goals.find((candidate) => candidate.id === goalId)
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (!goal || goal.cycleId !== currentCycle?.id) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          goals: prev.goals.map((candidate) =>
+            candidate.id === goalId ? { ...candidate, ...updates } : candidate,
           ),
-        })),
-      }))
+          cycles: prev.cycles.map((cycle) => ({
+            ...cycle,
+            goals: cycle.goals.map((candidate) =>
+              candidate.id === goalId
+                ? { ...candidate, ...updates }
+                : candidate,
+            ),
+          })),
+        }
+      })
     },
     createExerciseType: (exerciseType) => {
       setState((prev) => {
@@ -244,7 +263,11 @@ export function AppProvider({ children }: AppProviderProps) {
         const cycle = prev.cycles.find(
           (candidate) => candidate.id === cycleId,
         )
-        if (!exerciseType || !cycle) {
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (!exerciseType || !cycle || cycle.id !== currentCycle?.id) {
           return prev
         }
 
@@ -298,9 +321,13 @@ export function AppProvider({ children }: AppProviderProps) {
     },
     createAction: (action) => {
       setState((prev) => {
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
         if (
           prev.actions.some((candidate) => candidate.id === action.id) ||
-          !prev.cycles.some((cycle) => cycle.id === action.cycleId)
+          action.cycleId !== currentCycle?.id
         ) {
           return prev
         }
@@ -320,41 +347,67 @@ export function AppProvider({ children }: AppProviderProps) {
       })
     },
     updateAction: (actionId, updates) => {
-      setState((prev) => ({
-        ...prev,
-        actions: prev.actions.map((action) =>
-          action.id === actionId
-            ? {
-                ...action,
-                ...updates,
-                name: updates.name?.trim() || action.name,
-                note:
-                  updates.note === undefined
-                    ? action.note
-                    : updates.note.trim(),
-                targetCount:
-                  updates.targetCount === undefined
-                    ? action.targetCount
-                    : Math.max(1, Math.round(updates.targetCount)),
-                updatedAt: new Date().toISOString(),
-              }
-            : action,
-        ),
-      }))
+      setState((prev) => {
+        const actionToUpdate = prev.actions.find(
+          (action) => action.id === actionId,
+        )
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (!actionToUpdate || actionToUpdate.cycleId !== currentCycle?.id) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          actions: prev.actions.map((action) =>
+            action.id === actionId
+              ? {
+                  ...action,
+                  ...updates,
+                  name: updates.name?.trim() || action.name,
+                  note:
+                    updates.note === undefined
+                      ? action.note
+                      : updates.note.trim(),
+                  targetCount:
+                    updates.targetCount === undefined
+                      ? action.targetCount
+                      : Math.max(1, Math.round(updates.targetCount)),
+                  updatedAt: new Date().toISOString(),
+                }
+              : action,
+          ),
+        }
+      })
     },
     deleteAction: (actionId) => {
-      setState((prev) => ({
-        ...prev,
-        actions: prev.actions.map((action) =>
-          action.id === actionId
-            ? {
-                ...action,
-                deletedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-            : action,
-        ),
-      }))
+      setState((prev) => {
+        const actionToDelete = prev.actions.find(
+          (action) => action.id === actionId,
+        )
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (!actionToDelete || actionToDelete.cycleId !== currentCycle?.id) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          actions: prev.actions.map((action) =>
+            action.id === actionId
+              ? {
+                  ...action,
+                  deletedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                }
+              : action,
+          ),
+        }
+      })
     },
     addCycleTodo: (cycleId, text) => {
       const normalizedText = text.trim()
@@ -363,7 +416,11 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       setState((prev) => {
-        if (!prev.cycles.some((cycle) => cycle.id === cycleId)) {
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (cycleId !== currentCycle?.id) {
           return prev
         }
 
@@ -383,26 +440,48 @@ export function AppProvider({ children }: AppProviderProps) {
       })
     },
     toggleCycleTodo: (todoId) => {
-      setState((prev) => ({
-        ...prev,
-        todos: prev.todos.map((todo) =>
-          todo.id === todoId
-            ? {
-                ...todo,
-                completed: !todo.completed,
-                completedAt: todo.completed
-                  ? undefined
-                  : new Date().toISOString(),
-              }
-            : todo,
-        ),
-      }))
+      setState((prev) => {
+        const todoToToggle = prev.todos.find((todo) => todo.id === todoId)
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (!todoToToggle || todoToToggle.cycleId !== currentCycle?.id) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          todos: prev.todos.map((todo) =>
+            todo.id === todoId
+              ? {
+                  ...todo,
+                  completed: !todo.completed,
+                  completedAt: todo.completed
+                    ? undefined
+                    : new Date().toISOString(),
+                }
+              : todo,
+          ),
+        }
+      })
     },
     deleteCycleTodo: (todoId) => {
-      setState((prev) => ({
-        ...prev,
-        todos: prev.todos.filter((todo) => todo.id !== todoId),
-      }))
+      setState((prev) => {
+        const todoToDelete = prev.todos.find((todo) => todo.id === todoId)
+        const currentCycle = resolveCurrentCycle(
+          prev.cycles,
+          prev.activeCycleId,
+        )
+        if (!todoToDelete || todoToDelete.cycleId !== currentCycle?.id) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          todos: prev.todos.filter((todo) => todo.id !== todoId),
+        }
+      })
     },
     recordDailyActivity: (input) => {
       setState((prev) => {

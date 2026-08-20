@@ -13,18 +13,21 @@ export function resolveCurrentCycle(
   preferredCycleId: string | null,
   today = formatLocalDate(new Date()),
 ) {
-  const activeCycles = cycles.filter((cycle) => cycle.status === 'active')
+  const activeCycles = cycles.filter(
+    (cycle) => cycle.status === 'active' && cycle.targetDate >= today,
+  )
   const coversToday = (cycle: Cycle) =>
     cycle.startDate <= today && cycle.targetDate >= today
 
   return (
+    activeCycles.find(
+      (cycle) => cycle.id === preferredCycleId && coversToday(cycle),
+    ) ??
     activeCycles.find(coversToday) ??
     activeCycles.find((cycle) => cycle.id === preferredCycleId) ??
     [...activeCycles].sort((left, right) =>
+      left.startDate.localeCompare(right.startDate) ||
       right.createdAt.localeCompare(left.createdAt),
-    )[0] ??
-    cycles.find(coversToday) ??
-    cycles.find((cycle) => cycle.id === preferredCycleId) ??
-    cycles[0]
+    )[0]
   )
 }
