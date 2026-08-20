@@ -11,6 +11,7 @@ import { resolveActionCategoryLogo } from '../assets/cards'
 import { SETTINGS_SECTION_LOGOS } from '../assets/settings'
 import { Pig } from '../components/Pig'
 import { SettingsCard, SettingsSheet } from '../components/Settings'
+import { SettingsDateCalendar } from '../components/Settings/SettingsDateCalendar'
 import {
   NEXT_MEET_BACKUP_MAX_BYTES,
   createBackupFileName,
@@ -56,14 +57,6 @@ interface ActionDraft {
   note: string
   targetCount: number
   icon: string
-}
-
-interface SettingsDateFieldProps {
-  label: string
-  value: string
-  min?: string
-  max?: string
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void
 }
 
 const CATEGORY_LABELS: Record<ActionCategory, string> = {
@@ -160,30 +153,6 @@ function formatShortDate(value: string) {
     month: 'numeric',
     day: 'numeric',
   }).format(parseLocalDate(value))
-}
-
-function SettingsDateField({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: SettingsDateFieldProps) {
-  return (
-    <label>
-      <span>{label}</span>
-      <span className="settings-date-field">
-        <input
-          type="date"
-          aria-label={label}
-          min={min}
-          max={max}
-          value={value}
-          onChange={onChange}
-        />
-      </span>
-    </label>
-  )
 }
 
 function addDays(value: string, amount: number) {
@@ -291,6 +260,9 @@ export default function SettingsPage() {
     activeCycle?.targetDate ?? addDays(today, 1),
   )
   const [cycleError, setCycleError] = useState('')
+  const [openCycleDatePicker, setOpenCycleDatePicker] = useState<
+    'start' | 'target' | null
+  >(null)
   const [actionDraft, setActionDraft] = useState<ActionDraft | null>(null)
   const [actionError, setActionError] = useState('')
   const [pendingImport, setPendingImport] = useState<ParsedBackup | null>(null)
@@ -385,6 +357,7 @@ export default function SettingsPage() {
 
   const closeSheet = () => {
     setActiveSheet(null)
+    setOpenCycleDatePicker(null)
     setCycleError('')
     setActionError('')
     setPendingImport(null)
@@ -398,6 +371,7 @@ export default function SettingsPage() {
     setCycleStartDate(activeCycle.startDate)
     setCycleTargetDate(activeCycle.targetDate)
     setCycleError('')
+    setOpenCycleDatePicker(null)
     setActiveSheet('cycle')
   }
 
@@ -956,24 +930,41 @@ export default function SettingsPage() {
                 onChange={(event) => setCycleTitle(event.target.value)}
               />
             </label>
-            <div className="settings-form__columns">
-              <SettingsDateField
+            <div className="settings-form__date-fields">
+              <SettingsDateCalendar
                 label="开始日期"
                 min={minimumCycleStartDate}
                 max={today}
                 value={cycleStartDate}
-                onChange={(event) => {
-                  setCycleStartDate(event.target.value)
+                isOpen={openCycleDatePicker === 'start'}
+                onToggle={() => {
+                  setOpenCycleDatePicker((current) =>
+                    current === 'start' ? null : 'start',
+                  )
+                }}
+                onChange={(nextStartDate) => {
+                  setCycleStartDate(nextStartDate)
+                  if (cycleTargetDate <= nextStartDate) {
+                    setCycleTargetDate(addDays(nextStartDate, 1))
+                  }
                   setCycleError('')
+                  setOpenCycleDatePicker(null)
                 }}
               />
-              <SettingsDateField
+              <SettingsDateCalendar
                 label="目标日期"
                 min={addDays(cycleStartDate, 1)}
                 value={cycleTargetDate}
-                onChange={(event) => {
-                  setCycleTargetDate(event.target.value)
+                isOpen={openCycleDatePicker === 'target'}
+                onToggle={() => {
+                  setOpenCycleDatePicker((current) =>
+                    current === 'target' ? null : 'target',
+                  )
+                }}
+                onChange={(nextTargetDate) => {
+                  setCycleTargetDate(nextTargetDate)
                   setCycleError('')
+                  setOpenCycleDatePicker(null)
                 }}
               />
             </div>
