@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getDefaultAppState } from '../../constants/defaults'
 import { ensureCycleLifecycle } from '../../services/cycleLifecycle'
-import { resolveCurrentCycle } from '../../services/currentCycle'
+import {
+  resolveCurrentCycle,
+  resolvePreviousCycle,
+} from '../../services/currentCycle'
 import { synchronizePigGrowth } from '../../services/pigGrowth'
 import { loadAppState, saveAppState } from '../../services/storage'
 import type {
@@ -135,6 +138,15 @@ export function AppProvider({ children }: AppProviderProps) {
           prev.activeCycleId,
         )
         if (currentCycle?.id !== cycleId || currentCycle.status !== 'active') {
+          return prev
+        }
+
+        const nextCycle = { ...currentCycle, ...updates }
+        const previousCycle = resolvePreviousCycle(prev.cycles, currentCycle)
+        if (
+          nextCycle.targetDate <= nextCycle.startDate ||
+          (previousCycle && nextCycle.startDate <= previousCycle.targetDate)
+        ) {
           return prev
         }
 

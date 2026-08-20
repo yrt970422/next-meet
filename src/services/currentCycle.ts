@@ -31,3 +31,20 @@ export function resolveCurrentCycle(
     )[0]
   )
 }
+
+export function resolvePreviousCycle(
+  cycles: Cycle[],
+  currentCycle: Cycle,
+) {
+  return [...cycles]
+    .filter(
+      (cycle) =>
+        cycle.id !== currentCycle.id &&
+        cycle.status !== 'active' &&
+        cycle.targetDate < currentCycle.targetDate,
+    )
+    .sort((left, right) =>
+      right.targetDate.localeCompare(left.targetDate) ||
+      right.createdAt.localeCompare(left.createdAt),
+    )[0]
+}

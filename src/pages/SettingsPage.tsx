@@ -18,7 +18,10 @@ import {
   serializeNextMeetBackup,
   type ParsedBackup,
 } from '../services/backup'
-import { resolveCurrentCycle } from '../services/currentCycle'
+import {
+  resolveCurrentCycle,
+  resolvePreviousCycle,
+} from '../services/currentCycle'
 import { resolvePigGrowth } from '../services/pigGrowth'
 import type {
   Action,
@@ -268,6 +271,12 @@ export default function SettingsPage() {
     state.cycles,
     state.activeCycleId,
   )
+  const previousCycle = activeCycle
+    ? resolvePreviousCycle(state.cycles, activeCycle)
+    : undefined
+  const minimumCycleStartDate = previousCycle
+    ? addDays(previousCycle.targetDate, 1)
+    : undefined
   const activeActions = state.actions.filter(
     (action) => action.cycleId === activeCycle?.id && !action.deletedAt,
   )
@@ -399,6 +408,10 @@ export default function SettingsPage() {
     }
     if (cycleStartDate > today) {
       setCycleError('开始日期不能晚于今天。')
+      return
+    }
+    if (minimumCycleStartDate && cycleStartDate < minimumCycleStartDate) {
+      setCycleError('开始日期需要晚于上一周期的结束日期。')
       return
     }
     if (cycleTargetDate <= cycleStartDate) {
@@ -946,6 +959,7 @@ export default function SettingsPage() {
             <div className="settings-form__columns">
               <SettingsDateField
                 label="开始日期"
+                min={minimumCycleStartDate}
                 max={today}
                 value={cycleStartDate}
                 onChange={(event) => {
