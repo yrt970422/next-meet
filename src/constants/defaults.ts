@@ -6,6 +6,7 @@ import type {
   CycleTodo,
   ExerciseType,
 } from '../types/models'
+import { getActionDate } from '../services/actionDay'
 import { SHANGHAI_PUBLIC_CYCLE } from './publicCycles'
 
 export const SAMPLE_PREVIOUS_CYCLE_ID = 'sample-previous-cycle-v1'
@@ -93,6 +94,7 @@ export function getSamplePreviousCycleData(
     category: definition.category,
     name: definition.name,
     note: definition.note,
+    targetMode: 'total',
     targetCount: definition.targetCount,
     icon: definition.icon,
     createdAt,
@@ -225,7 +227,7 @@ const GUIYANG_TARGET_DATE = '2026-08-19'
 const SHANGHAI_TARGET_DATE = SHANGHAI_PUBLIC_CYCLE.targetDate
 
 export function getDefaultCyclePreset(openedAt = new Date()) {
-  const startDate = formatLocalDate(openedAt)
+  const startDate = getActionDate(openedAt)
 
   if (startDate < GUIYANG_TARGET_DATE) {
     return {
@@ -288,6 +290,7 @@ export function getDefaultAppState(openedAt = new Date()): AppState {
       category: 'health' as const,
       name: '跑步',
       note: '30 分钟',
+      targetMode: 'total' as const,
       targetCount: 3,
       icon: '🏃',
       createdAt,
@@ -299,6 +302,7 @@ export function getDefaultAppState(openedAt = new Date()): AppState {
       category: 'rest' as const,
       name: '早睡',
       note: '00:00 前休息',
+      targetMode: 'total' as const,
       targetCount: 5,
       icon: '🌙',
       createdAt,

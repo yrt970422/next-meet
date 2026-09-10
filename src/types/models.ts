@@ -3,6 +3,7 @@ import type { PigLevel } from './pig'
 export type GoalType = 'strength' | 'cardio' | 'sleep' | 'todo'
 export type ActivityType = 'action'
 export type ActivitySource = 'daily' | 'makeup' | 'migration'
+export type TargetMode = 'total' | 'weekly'
 export type ExerciseCategory = 'strength' | 'cardio' | 'flexibility' | 'other'
 export type ActionCategory =
   | 'health'
@@ -40,7 +41,9 @@ export interface Action {
   categoryLabel?: string
   name: string
   note: string
+  targetMode?: TargetMode
   targetCount: number
+  weeklyTarget?: number
   icon?: string
   createdAt: string
   updatedAt: string

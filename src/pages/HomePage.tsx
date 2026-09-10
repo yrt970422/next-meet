@@ -4,6 +4,7 @@ import { useAppState } from '../app/providers/useAppState'
 import { preloadPigAsset, type PigPose } from '../assets/pig'
 import { DailyActionCard } from '../components/DailyActionCard'
 import { Pig } from '../components/Pig'
+import { getActionDate } from '../services/actionDay'
 import { resolveCurrentCycle } from '../services/currentCycle'
 import type { ActionCategory, ActivityRecord } from '../types/models'
 import './HomePage.css'
@@ -38,14 +39,7 @@ function parseLocalDate(dateString: string) {
   return new Date(year, month - 1, day)
 }
 
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function getDaysUntil(dateString?: string) {
+function getDaysUntil(dateString: string | undefined, todayString: string) {
   if (!dateString) {
     return null
   }
@@ -55,8 +49,10 @@ function getDaysUntil(dateString?: string) {
     return null
   }
 
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const today = parseLocalDate(todayString)
+  if (!today) {
+    return null
+  }
 
   return Math.ceil((target.getTime() - today.getTime()) / DAY_IN_MS)
 }
@@ -87,7 +83,7 @@ export default function HomePage() {
     recordDailyActivity,
   } = useAppState()
   const navigate = useNavigate()
-  const today = formatLocalDate(new Date())
+  const today = getActionDate()
   const [pigFeedback, setPigFeedback] = useState<HeroPigFeedback>(null)
   const [actionPageStart, setActionPageStart] = useState(0)
   const [todoDraft, setTodoDraft] = useState('')
@@ -99,7 +95,7 @@ export default function HomePage() {
     today,
   )
   const activeCycleId = activeCycle?.id
-  const daysUntil = getDaysUntil(activeCycle?.targetDate)
+  const daysUntil = getDaysUntil(activeCycle?.targetDate, today)
   const cycleTodos = state.todos.filter(
     (todo) => todo.cycleId === activeCycle?.id,
   )

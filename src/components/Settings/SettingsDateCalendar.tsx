@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react'
+import { formatCalendarDate, getActionDate } from '../../services/actionDay'
 import './SettingsDateCalendar.css'
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -11,13 +12,6 @@ interface SettingsDateCalendarProps {
   isOpen: boolean
   onToggle: () => void
   onChange: (value: string) => void
-}
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function parseLocalDate(value: string) {
@@ -128,7 +122,7 @@ function CalendarPanel({
   const currentMonth = monthKey(visibleMonth)
   const cannotGoBack = minimumMonth !== undefined && currentMonth <= minimumMonth
   const cannotGoForward = maximumMonth !== undefined && currentMonth >= maximumMonth
-  const today = formatLocalDate(new Date())
+  const today = getActionDate()
 
   return (
     <section
@@ -167,7 +161,7 @@ function CalendarPanel({
             return <span key={`empty-${index}`} aria-hidden="true" />
           }
 
-          const dateValue = formatLocalDate(date)
+          const dateValue = formatCalendarDate(date)
           const isDisabled =
             (min !== undefined && dateValue < min) ||
             (max !== undefined && dateValue > max)

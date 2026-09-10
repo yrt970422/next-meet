@@ -11,6 +11,7 @@ import type {
   UserSettings,
 } from '../types/models'
 import { synchronizePigGrowth } from './pigGrowth'
+import { normalizeActionTargetConfiguration } from './actionTargets'
 
 export const NEXT_MEET_BACKUP_FORMAT = 'next-meet-backup'
 export const NEXT_MEET_BACKUP_VERSION = 1
@@ -106,7 +107,12 @@ function isAction(value: unknown): value is Action {
     isOptionalString(value.categoryLabel) &&
     isString(value.name) &&
     isString(value.note) &&
+    (value.targetMode === undefined ||
+      ['total', 'weekly'].includes(String(value.targetMode))) &&
     isFiniteNumber(value.targetCount) &&
+    isOptionalFiniteNumber(value.weeklyTarget) &&
+    (value.targetMode !== 'weekly' ||
+      (isFiniteNumber(value.weeklyTarget) && value.weeklyTarget > 0)) &&
     isOptionalString(value.icon) &&
     isString(value.createdAt) &&
     isString(value.updatedAt) &&
@@ -343,7 +349,11 @@ export function parseNextMeetBackup(raw: string): ParsedBackup {
     throw new Error('这不是有效的 next-meet 备份，或备份版本暂不支持。')
   }
 
-  const state = synchronizePigGrowth(validateAppState(parsed.data))
+  const validatedState = validateAppState(parsed.data)
+  const state = synchronizePigGrowth({
+    ...validatedState,
+    actions: validatedState.actions.map(normalizeActionTargetConfiguration),
+  })
   const backup = parsed as unknown as NextMeetBackup
   return {
     backup,

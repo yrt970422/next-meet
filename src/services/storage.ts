@@ -1,6 +1,7 @@
 import { APP_STORAGE_KEY } from './storageKeys'
 import { resolveCurrentCycle } from './currentCycle'
 import { getDefaultExerciseTypes } from '../constants/defaults'
+import { normalizeActionTargetConfiguration } from './actionTargets'
 import type {
   Action,
   ActionCategory,
@@ -249,6 +250,7 @@ function deriveActions(
             category: 'rest',
             name: goal.title ?? '早睡',
             note: `${sleepTargetTime} 前休息`,
+            targetMode: 'total',
             targetCount: goal.targetCount,
             icon: '🌙',
             createdAt,
@@ -271,6 +273,7 @@ function deriveActions(
             exerciseType?.category === 'strength'
               ? '60 分钟'
               : '30 分钟',
+          targetMode: 'total',
           targetCount: goal.targetCount,
           icon: exerciseType?.icon ?? '💪',
           createdAt,
@@ -351,9 +354,11 @@ function migrateStoredState(state: StoredAppState): AppState {
     Array.isArray(state.exerciseTypes) &&
     typeof state.settings.carryOverUnfinishedTodos === 'boolean'
   ) {
-    // Current-schema snapshots are already canonical. Returning them unchanged
-    // keeps imported backups exact and avoids injecting defaults or sample data.
-    return state as unknown as AppState
+    const currentState = state as unknown as AppState
+    return {
+      ...currentState,
+      actions: currentState.actions.map(normalizeActionTargetConfiguration),
+    }
   }
 
   const storedGoals = state.goals.map(normalizeGoal)
@@ -397,7 +402,7 @@ function migrateStoredState(state: StoredAppState): AppState {
     state.schemaVersion === 6 && state.actions
       ? state.actions
       : deriveActions(cycles, exerciseTypes, state.settings.sleepTargetTime)
-  const actions = migratedActions
+  const actions = migratedActions.map(normalizeActionTargetConfiguration)
   const actionsById = new Map(actions.map((action) => [action.id, action]))
   const actionIdByGoalId = new Map<string, string>()
   const actionIdByExercise = new Map<string, string>()

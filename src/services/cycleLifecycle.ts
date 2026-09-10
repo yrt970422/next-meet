@@ -7,6 +7,8 @@ import type {
   Goal,
 } from '../types/models'
 import { resolveCurrentCycle } from './currentCycle'
+import { applyActionTargetToCycle } from './actionTargets'
+import { formatCalendarDate, getActionDate } from './actionDay'
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const FALLBACK_CYCLE_LENGTH_DAYS = 21
@@ -14,13 +16,6 @@ const FALLBACK_CYCLE_LENGTH_DAYS = 21
 interface EnsureCycleLifecycleOptions {
   today?: string
   now?: string
-}
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function parseLocalDate(value: string) {
@@ -31,7 +26,7 @@ function parseLocalDate(value: string) {
 function addDays(value: string, amount: number) {
   const date = parseLocalDate(value)
   date.setDate(date.getDate() + amount)
-  return formatLocalDate(date)
+  return formatCalendarDate(date)
 }
 
 function inclusiveDayCount(startDate: string, targetDate: string) {
@@ -70,19 +65,19 @@ function cloneGoals(goals: Goal[], cycleId: string) {
   }))
 }
 
-function cloneActions(actions: Action[], cycleId: string, now: string) {
+function cloneActions(actions: Action[], cycle: Cycle, now: string) {
   return actions
     .filter((action) => !action.deletedAt)
     .map((action) => {
       const { deletedAt: _deletedAt, ...actionConfiguration } = action
       void _deletedAt
-      return {
+      return applyActionTargetToCycle({
         ...actionConfiguration,
         id: createId('action'),
-        cycleId,
+        cycleId: cycle.id,
         createdAt: now,
         updatedAt: now,
-      }
+      }, cycle)
     })
 }
 
@@ -185,7 +180,7 @@ export function ensureCycleLifecycle(
   state: AppState,
   options: EnsureCycleLifecycleOptions = {},
 ): AppState {
-  const today = options.today ?? formatLocalDate(new Date())
+  const today = options.today ?? getActionDate()
   const now = options.now ?? new Date().toISOString()
   let didCompleteCycle = false
   const cycles = state.cycles.map((cycle) => {
@@ -243,7 +238,7 @@ export function ensureCycleLifecycle(
         (action) => action.cycleId === previousCycle.id,
       )
     : []
-  const actions = cloneActions(previousActions, cycle.id, now)
+  const actions = cloneActions(previousActions, cycle, now)
   const todos = cloneTodos(
     stateAfterCompletion.todos,
     previousCycle?.id,

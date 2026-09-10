@@ -2,11 +2,20 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getDefaultAppState } from '../../constants/defaults'
 import { ensureCycleLifecycle } from '../../services/cycleLifecycle'
 import {
+  applyActionTargetToCycle,
+  normalizeTargetValue,
+  resolveTargetMode,
+} from '../../services/actionTargets'
+import {
   resolveCurrentCycle,
   resolvePreviousCycle,
 } from '../../services/currentCycle'
 import { synchronizePigGrowth } from '../../services/pigGrowth'
 import { loadAppState, saveAppState } from '../../services/storage'
+import {
+  createRecordedAtForActionDate,
+  getActionDate,
+} from '../../services/actionDay'
 import type {
   ActivityRecord,
   AppState,
@@ -15,14 +24,6 @@ import { AppContext, type AppContextValue } from './AppContext'
 
 interface AppProviderProps {
   children: ReactNode
-}
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
 }
 
 function createActivityId() {
@@ -113,13 +114,18 @@ export function AppProvider({ children }: AppProviderProps) {
             (action) =>
               action.cycleId === prev.activeCycleId && !action.deletedAt,
           )
-          .map((action) => ({
-            ...action,
-            id: createActionId(),
-            cycleId: cycle.id,
-            createdAt: now,
-            updatedAt: now,
-          }))
+          .map((action) =>
+            applyActionTargetToCycle(
+              {
+                ...action,
+                id: createActionId(),
+                cycleId: cycle.id,
+                createdAt: now,
+                updatedAt: now,
+              },
+              cycle,
+            ),
+          )
 
         return {
           ...prev,
@@ -150,11 +156,37 @@ export function AppProvider({ children }: AppProviderProps) {
           return prev
         }
 
+        const datesChanged =
+          nextCycle.startDate !== currentCycle.startDate ||
+          nextCycle.targetDate !== currentCycle.targetDate
+        const now = new Date().toISOString()
+
         return {
           ...prev,
           cycles: prev.cycles.map((cycle) =>
             cycle.id === cycleId ? { ...cycle, ...updates } : cycle,
           ),
+          actions: datesChanged
+            ? prev.actions.map((action) => {
+                if (
+                  action.cycleId !== cycleId ||
+                  resolveTargetMode(action) !== 'weekly'
+                ) {
+                  return action
+                }
+                const recalculated = applyActionTargetToCycle(
+                  action,
+                  nextCycle,
+                )
+                return {
+                  ...recalculated,
+                  updatedAt:
+                    recalculated.targetCount === action.targetCount
+                      ? action.updatedAt
+                      : now,
+                }
+              })
+            : prev.actions,
         }
       })
     },
@@ -344,17 +376,19 @@ export function AppProvider({ children }: AppProviderProps) {
           return prev
         }
 
+        const normalizedAction = applyActionTargetToCycle(
+          {
+            ...action,
+            name: action.name.trim(),
+            note: action.note.trim(),
+            targetCount: normalizeTargetValue(action.targetCount),
+          },
+          currentCycle,
+        )
+
         return {
           ...prev,
-          actions: [
-            ...prev.actions,
-            {
-              ...action,
-              name: action.name.trim(),
-              note: action.note.trim(),
-              targetCount: Math.max(1, Math.round(action.targetCount)),
-            },
-          ],
+          actions: [...prev.actions, normalizedAction],
         }
       })
     },
@@ -371,25 +405,38 @@ export function AppProvider({ children }: AppProviderProps) {
           return prev
         }
 
+        const nextMode = updates.targetMode ?? resolveTargetMode(actionToUpdate)
+        const nextAction = applyActionTargetToCycle(
+          {
+            ...actionToUpdate,
+            ...updates,
+            targetMode: nextMode,
+            weeklyTarget:
+              nextMode === 'weekly'
+                ? normalizeTargetValue(
+                    updates.weeklyTarget ??
+                      actionToUpdate.weeklyTarget ??
+                      1,
+                  )
+                : undefined,
+            name: updates.name?.trim() || actionToUpdate.name,
+            note:
+              updates.note === undefined
+                ? actionToUpdate.note
+                : updates.note.trim(),
+            targetCount:
+              updates.targetCount === undefined
+                ? actionToUpdate.targetCount
+                : normalizeTargetValue(updates.targetCount),
+            updatedAt: new Date().toISOString(),
+          },
+          currentCycle,
+        )
+
         return {
           ...prev,
           actions: prev.actions.map((action) =>
-            action.id === actionId
-              ? {
-                  ...action,
-                  ...updates,
-                  name: updates.name?.trim() || action.name,
-                  note:
-                    updates.note === undefined
-                      ? action.note
-                      : updates.note.trim(),
-                  targetCount:
-                    updates.targetCount === undefined
-                      ? action.targetCount
-                      : Math.max(1, Math.round(updates.targetCount)),
-                  updatedAt: new Date().toISOString(),
-                }
-              : action,
+            action.id === actionId ? nextAction : action,
           ),
         }
       })
@@ -501,7 +548,7 @@ export function AppProvider({ children }: AppProviderProps) {
           (candidate) => candidate.id === input.actionId,
         )
         const now = new Date()
-        const date = formatLocalDate(now)
+        const date = getActionDate(now)
         const currentCycle = resolveCurrentCycle(
           prev.cycles,
           prev.activeCycleId,
@@ -576,7 +623,7 @@ export function AppProvider({ children }: AppProviderProps) {
         const cycle = prev.cycles.find(
           (candidate) => candidate.id === action.cycleId,
         )
-        const today = formatLocalDate(new Date())
+        const today = getActionDate()
 
         if (
           !cycle ||
@@ -584,13 +631,6 @@ export function AppProvider({ children }: AppProviderProps) {
           input.date < cycle.startDate ||
           input.date > cycle.targetDate
         ) {
-          return prev
-        }
-
-        const completedCount = prev.activities.filter(
-          (activity) => activity.actionId === action.id,
-        ).length
-        if (completedCount >= action.targetCount) {
           return prev
         }
 
@@ -605,8 +645,11 @@ export function AppProvider({ children }: AppProviderProps) {
           return prev
         }
 
-        const recordedAt = new Date(`${input.date}T${input.time}:00`)
-        if (Number.isNaN(recordedAt.getTime())) {
+        const recordedAt = createRecordedAtForActionDate(
+          input.date,
+          input.time,
+        )
+        if (!recordedAt) {
           return prev
         }
 

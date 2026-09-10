@@ -24,9 +24,15 @@ import {
   resolvePreviousCycle,
 } from '../services/currentCycle'
 import { resolvePigGrowth } from '../services/pigGrowth'
+import {
+  calculateWeeklyTargetCount,
+  resolveTargetMode,
+} from '../services/actionTargets'
+import { formatCalendarDate, getActionDate } from '../services/actionDay'
 import type {
   Action,
   ActionCategory,
+  TargetMode,
 } from '../types/models'
 import './SettingsPage.css'
 
@@ -55,7 +61,9 @@ interface ActionDraft {
   choice: string
   name: string
   note: string
+  targetMode: TargetMode
   targetCount: number
+  weeklyTarget: number
   icon: string
 }
 
@@ -136,13 +144,6 @@ function settingsSectionIcon(
   )
 }
 
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function parseLocalDate(value: string) {
   const [year, month, day] = value.split('-').map(Number)
   return new Date(year, month - 1, day)
@@ -158,7 +159,7 @@ function formatShortDate(value: string) {
 function addDays(value: string, amount: number) {
   const date = parseLocalDate(value)
   date.setDate(date.getDate() + amount)
-  return formatLocalDate(date)
+  return formatCalendarDate(date)
 }
 
 function formatBackupDate(value: string) {
@@ -203,7 +204,9 @@ function createActionDraft(category: ActionCategory = 'health'): ActionDraft {
     choice: category === 'custom' ? '__custom' : preset.name,
     name: preset.name,
     note: preset.note,
+    targetMode: 'total',
     targetCount: 6,
+    weeklyTarget: 3,
     icon: preset.icon,
   }
 }
@@ -220,7 +223,9 @@ function draftFromAction(action: Action): ActionDraft {
     choice: matchingPreset?.name ?? '__custom',
     name: action.name,
     note: action.note,
+    targetMode: resolveTargetMode(action),
     targetCount: action.targetCount,
+    weeklyTarget: action.weeklyTarget ?? 3,
     icon: action.icon ?? matchingPreset?.icon ?? '✦',
   }
 }
@@ -249,7 +254,7 @@ export default function SettingsPage() {
   const activeActions = state.actions.filter(
     (action) => action.cycleId === activeCycle?.id && !action.deletedAt,
   )
-  const today = formatLocalDate(new Date())
+  const today = getActionDate()
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null)
   const [pigName, setPigName] = useState(state.pig.name)
   const [cycleTitle, setCycleTitle] = useState(activeCycle?.title ?? '')
@@ -467,6 +472,14 @@ export default function SettingsPage() {
       return
     }
     const now = new Date().toISOString()
+    const targetCount =
+      actionDraft.targetMode === 'weekly'
+        ? calculateWeeklyTargetCount(
+            activeCycle.startDate,
+            activeCycle.targetDate,
+            actionDraft.weeklyTarget,
+          )
+        : actionDraft.targetCount
     const values = {
       category: actionDraft.category,
       categoryLabel:
@@ -475,7 +488,12 @@ export default function SettingsPage() {
           : undefined,
       name,
       note: actionDraft.note.trim(),
-      targetCount: actionDraft.targetCount,
+      targetMode: actionDraft.targetMode,
+      targetCount,
+      weeklyTarget:
+        actionDraft.targetMode === 'weekly'
+          ? actionDraft.weeklyTarget
+          : undefined,
       icon: actionDraft.icon,
     }
 
@@ -565,12 +583,14 @@ export default function SettingsPage() {
     setDataMessage('小猪和记录都回来啦')
   }
 
-  const cycleWeeks = activeCycle
-    ? Math.max(1, activeCycle.lengthDays / 7)
-    : 1
-  const weeklyFrequency = actionDraft
-    ? Math.round((actionDraft.targetCount / cycleWeeks) * 10) / 10
-    : 0
+  const convertedWeeklyTarget =
+    activeCycle && actionDraft?.targetMode === 'weekly'
+      ? calculateWeeklyTargetCount(
+          activeCycle.startDate,
+          activeCycle.targetDate,
+          actionDraft.weeklyTarget,
+        )
+      : null
   const installSteps =
     installDevice === 'android'
       ? ['点击浏览器菜单', '选择「添加到主屏幕」', '点击添加']
@@ -1001,7 +1021,10 @@ export default function SettingsPage() {
                       {action.category === 'custom'
                         ? action.categoryLabel || '好习惯'
                         : CATEGORY_LABELS[action.category]}
-                      {' · '}{action.targetCount} 次
+                      {' · '}
+                      {resolveTargetMode(action) === 'weekly'
+                        ? `每周 ${action.weeklyTarget ?? 1} 次 · 本周期 ${action.targetCount} 次`
+                        : `本周期 ${action.targetCount} 次`}
                     </small>
                   </span>
                   <span aria-hidden="true">›</span>
@@ -1098,23 +1121,60 @@ export default function SettingsPage() {
               />
             </label>
 
-            <label>
-              <span>周期目标</span>
-              <select
-                value={actionDraft.targetCount}
-                onChange={(event) =>
-                  setActionDraft({
-                    ...actionDraft,
-                    targetCount: Number(event.target.value),
-                  })
-                }
-              >
-                {TARGET_OPTIONS.map((target) => (
-                  <option key={target} value={target}>{target} 次</option>
-                ))}
-              </select>
-              <small>每周约 {weeklyFrequency} 次</small>
-            </label>
+            <fieldset className="settings-target-field">
+              <legend>周期目标</legend>
+              <div className="settings-target-field__modes" role="group" aria-label="目标方式">
+                <button
+                  className={actionDraft.targetMode === 'total' ? 'is-selected' : ''}
+                  type="button"
+                  aria-pressed={actionDraft.targetMode === 'total'}
+                  onClick={() =>
+                    setActionDraft({ ...actionDraft, targetMode: 'total' })
+                  }
+                >
+                  整个周期
+                </button>
+                <button
+                  className={actionDraft.targetMode === 'weekly' ? 'is-selected' : ''}
+                  type="button"
+                  aria-pressed={actionDraft.targetMode === 'weekly'}
+                  onClick={() =>
+                    setActionDraft({ ...actionDraft, targetMode: 'weekly' })
+                  }
+                >
+                  每周
+                </button>
+              </div>
+              <label>
+                <span>
+                  {actionDraft.targetMode === 'weekly'
+                    ? '每周完成'
+                    : '这一场完成'}
+                </span>
+                <select
+                  value={
+                    actionDraft.targetMode === 'weekly'
+                      ? actionDraft.weeklyTarget
+                      : actionDraft.targetCount
+                  }
+                  onChange={(event) => {
+                    const nextTarget = Number(event.target.value)
+                    setActionDraft(
+                      actionDraft.targetMode === 'weekly'
+                        ? { ...actionDraft, weeklyTarget: nextTarget }
+                        : { ...actionDraft, targetCount: nextTarget },
+                    )
+                  }}
+                >
+                  {TARGET_OPTIONS.map((target) => (
+                    <option key={target} value={target}>{target} 次</option>
+                  ))}
+                </select>
+              </label>
+              {convertedWeeklyTarget !== null ? (
+                <small>自动换算为本周期 {convertedWeeklyTarget} 次</small>
+              ) : null}
+            </fieldset>
 
             {actionError ? (
               <p className="settings-form__error" role="alert">{actionError}</p>

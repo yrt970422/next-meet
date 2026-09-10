@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAppState } from '../app/providers/useAppState'
 import { resolveActionCategoryLogo } from '../assets/cards'
+import { getActionDate } from '../services/actionDay'
 import { resolveCurrentCycle } from '../services/currentCycle'
 import type { ActivityRecord } from '../types/models'
 import './CyclePage.css'
@@ -8,13 +9,6 @@ import './CyclePage.css'
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 const SNACKBAR_DURATION = 2500
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 function parseLocalDate(value: string) {
   const [year, month, day] = value.split('-').map(Number)
@@ -100,7 +94,7 @@ export default function CyclePage() {
     recordActivityForDate,
     deleteActivityRecord,
   } = useAppState()
-  const today = formatLocalDate(new Date())
+  const today = getActionDate()
   const currentCycle = resolveCurrentCycle(
     state.cycles,
     state.activeCycleId,
@@ -176,9 +170,7 @@ export default function CyclePage() {
     selectedRecords.map((record) => record.actionId),
   )
   const availableMakeupActions = cycleActions.filter(
-    (action) =>
-      !recordedActionIds.has(action.id) &&
-      (completedCounts.get(action.id) ?? 0) < action.targetCount,
+    (action) => !recordedActionIds.has(action.id),
   )
   const canAddForSelectedDate =
     Boolean(selectedDate) &&
@@ -212,9 +204,7 @@ export default function CyclePage() {
       dateRecords.map((record) => record.actionId),
     )
     const firstAvailable = cycleActions.find(
-      (action) =>
-        !dateActionIds.has(action.id) &&
-        (completedCounts.get(action.id) ?? 0) < action.targetCount,
+      (action) => !dateActionIds.has(action.id),
     )
     setSelectedDate(date)
     setMakeupActionId(firstAvailable?.id ?? '')

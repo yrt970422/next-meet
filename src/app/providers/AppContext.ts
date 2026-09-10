@@ -38,7 +38,14 @@ export interface AppContextValue {
     updates: Partial<
       Pick<
         Action,
-        'category' | 'categoryLabel' | 'name' | 'note' | 'targetCount' | 'icon'
+        | 'category'
+        | 'categoryLabel'
+        | 'name'
+        | 'note'
+        | 'targetMode'
+        | 'targetCount'
+        | 'weeklyTarget'
+        | 'icon'
       >
     >,
   ) => void
